@@ -15,7 +15,9 @@ using BenchmarkTools
 using StaticArrays
 using FiniteDifferences
 using ..MathUtils: safe_log
-using ..Integration: gauleg
+using ..Integration: gauleg  # Import Integration module
+using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
+                             omega_thermal_integral, vacuum_energy_integral
 
 # 直接定义需要的常数和函数
 const π = 3.141592653589793
@@ -146,40 +148,38 @@ end
     calculate_energy_sum(masses, p_nodes, coefficient)
 
 Calculate energy sum contribution to thermodynamic potential.
+
+**DEPRECATED**: This function is deprecated. Use `vacuum_energy_integral` from IntegrationInterface instead.
 """
 @inline function calculate_energy_sum(masses, p_nodes, coefficient)
-    total = 0.0
-    @inbounds for i in eachindex(masses)
-        mass_i = masses[i]
-        
-        @inbounds @simd for j in eachindex(p_nodes)
-            E = calculate_energy(mass_i, p_nodes[j])
-            total += E * coefficient[j]
-        end
-    end
-    return total * (-Nc)
+    # 创建临时网格以兼容新接口
+    domain = (0.0, maximum(p_nodes))
+    grid = MomentumGrid(p_nodes, coefficient, domain, domain[2])
+    
+    # 使用新的积分接口
+    result = vacuum_energy_integral(masses, grid, GaussLegendreIntegration())
+    
+    # 保持与原实现相同的归一化
+    return result * (-Nc) / (1/(3.0 * π^2))  # 撤销新接口中的几何因子
 end
 
 """
     calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient)
 
 Calculate logarithmic sum contribution to thermodynamic potential.
+
+**DEPRECATED**: This function is deprecated. Use `omega_thermal_integral` from IntegrationInterface instead.
 """
 @inline function calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient)
-    total = 0.0
+    # 创建临时网格以兼容新接口
+    domain = (0.0, maximum(p_nodes))
+    grid = MomentumGrid(p_nodes, coefficient, domain, domain[2])
     
-    @inbounds for i in eachindex(masses)
-        mass_i = masses[i]
-        mu_i = mu[i]
-        @inbounds @simd for j in eachindex(p_nodes)
-            p = p_nodes[j]
-            E_i = calculate_energy(mass_i, p)
-            coefficient_j = coefficient[j]
-            log_term = calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
-            total += log_term * coefficient_j
-        end
-    end
-    return total * (-T)
+    # 使用新的积分接口
+    result = omega_thermal_integral(masses, mu, T, Phi1, Phi2, grid, GaussLegendreIntegration())
+    
+    # 保持与原实现相同的归一化（新接口已包含-T和几何因子）
+    return result * (3.0 * π^2)  # 撤销新接口中的几何因子，保持原始行为
 end
 
 """

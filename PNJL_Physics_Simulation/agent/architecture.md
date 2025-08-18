@@ -44,7 +44,62 @@ function finite_difference(f, x; method=:central, order=1, h=1e-6)
 end
 ```
 
-#### 1.2 常数管理模块 (`src/core/constants.jl`)
+#### 1.2 积分计算接口 (`src/core/integration.jl`)
+```julia
+module Integration
+
+# 积分方法抽象
+abstract type IntegrationMethod end
+abstract type IntegrationGrid end
+
+# 具体积分方法
+struct GaussLegendre <: IntegrationMethod
+    n_points::Int
+    tolerance::Float64
+end
+
+struct AdaptiveQuadrature <: IntegrationMethod
+    tolerance::Float64
+    max_subdivisions::Int
+end
+
+# 积分网格定义
+struct UniformGrid <: IntegrationGrid
+    nodes::Vector{Float64}
+    weights::Vector{Float64}
+    domain::Tuple{Float64, Float64}
+end
+
+struct ProductGrid <: IntegrationGrid
+    grids::Vector{IntegrationGrid}
+end
+
+# 核心积分接口
+function integrate(method::IntegrationMethod, grid::IntegrationGrid, 
+                  integrand::Function)
+    
+function integrate_multidimensional(method::IntegrationMethod, 
+                                   grids::Vector{<:IntegrationGrid},
+                                   integrand::Function)
+
+# PNJL专用积分函数
+function omega_thermal_integral(masses::Vector, chemical_potentials::Vector,
+                               T::Float64, Phi1::Float64, Phi2::Float64,
+                               momentum_grid::IntegrationGrid,
+                               method::IntegrationMethod=GaussLegendre())
+
+function vacuum_energy_integral(masses::Vector, momentum_grid::IntegrationGrid,
+                               method::IntegrationMethod=GaussLegendre())
+
+# 网格生成工具
+function create_momentum_grid(n_points::Int, cutoff::Float64)
+function create_angle_grid(n_points::Int)
+function create_product_grid(grids...)
+
+end
+```
+
+#### 1.4 常数管理模块 (`src/core/constants.jl`)
 ```julia
 module PhysicsConstants
 
@@ -136,9 +191,27 @@ struct PNJLState <: ThermodynamicState
     polyakov_loops::SVector{2,Float64}      # Φ₁, Φ₂
 end
 
-# PNJL 模型实现
+# PNJL 模型实现 (使用新积分接口)
 function calculate_pressure(system::PNJL, state::PNJLState)
-    # 实现 PNJL 压力计算
+    # 解包状态参数
+    T, mu, phi, Phi1, Phi2 = state.temperature, state.chemical_potentials, 
+                             state.condensates, state.polyakov_loops...
+    
+    # 计算各个贡献项
+    chi = calculate_chiral_condensate(phi)
+    U = calculate_polyakov_potential(T, Phi1, Phi2)
+    
+    # 使用新积分接口计算费米子贡献
+    masses = calculate_effective_masses(phi)
+    
+    # 真空能量积分
+    vacuum_energy = vacuum_energy_integral(masses, system.grid_config.momentum_grid)
+    
+    # 热贡献积分 (替代原来的 calculate_log_sum)
+    thermal_energy = omega_thermal_integral(masses, mu, T, Phi1, Phi2, 
+                                          system.grid_config.momentum_grid)
+    
+    return -(chi + U + vacuum_energy + thermal_energy)
 end
 
 function calculate_chiral_condensate(system::PNJL, state::PNJLState)

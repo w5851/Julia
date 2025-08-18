@@ -9,6 +9,7 @@ module PNJLPhysicsSimulation
 include("core/constants.jl")
 include("core/math_utils.jl")
 include("core/integration.jl")  
+include("core/integration_interface.jl")
 include("core/thermodynamics.jl")
 
 # Model modules
@@ -22,7 +23,7 @@ include("models/rotation/constants.jl")
 include("models/rotation/functions.jl")
 
 # Export everything for now to test
-export PhysicalConstants, Integration, Thermodynamics, MathUtils,
+export PhysicalConstants, Integration, IntegrationInterface, Thermodynamics, MathUtils,
        GasLiquidConstants, GasLiquidFunctions,
        PNJLConstants, PNJLFunctions, 
        PNJLAnisoConstants, RotationConstants

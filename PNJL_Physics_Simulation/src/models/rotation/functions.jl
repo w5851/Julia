@@ -11,7 +11,8 @@ using NLsolve
 using StaticArrays
 using FiniteDifferences
 using FastGaussQuadrature
-using ..Integration: gauleg
+using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, 
+                             integrate_2d, MomentumGrid, AngleGrid
 
 # 直接定义需要的常数和函数
 const π = 3.141592653589793
@@ -73,7 +74,7 @@ function init_bessel(p, theta, n, w)
     return coefficient ./ (4.0 .* π^2)
 end
 
-function get_nodes(p_num::Int, t_num::Int)
+function get_nodes_rotation(p_num::Int, t_num::Int)
     """
     Generate integration nodes for rotation model
     
@@ -114,7 +115,7 @@ function get_nodes(p_num::Int, t_num::Int)
     return nodes1, nodes2
 end
 
-@inline function calculate_chiral(phi)
+@inline function calculate_chiral_rotation(T)
     """Calculate chiral condensate contribution for rotation model"""
     term1 = G_f * mean(phi.^2)
     return term1
@@ -168,21 +169,37 @@ end
 end
 
 @inline function calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, n_nodes, omega)
-    """Calculate logarithmic sum for rotation model"""
+    """Calculate logarithmic sum for rotation model
+    
+    **DEPRECATED**: This function is deprecated. Use new integration interface instead.
+    """
+    # 创建二维网格 (动量 x 角动量量子数)
+    p_domain = (0.0, maximum(p_nodes))
+    p_grid = MomentumGrid(p_nodes, coefficient, p_domain, p_domain[2])
+    
+    # 对于角动量量子数，使用离散网格
+    n_domain = (minimum(n_nodes), maximum(n_nodes))
+    n_grid = AngleGrid(n_nodes, ones(length(n_nodes)), n_domain)
+    
+    method = GaussLegendreIntegration()
     total = 0.0
     
-    @inbounds for i in eachindex(masses)
-        mass_i = masses[i]
+    # 对每个夸克味道计算贡献
+    @inbounds for (i, mass_i) in enumerate(masses)
         mu_i = mu[i]
-        @inbounds @simd for j in eachindex(p_nodes)
-            p = p_nodes[j]
-            n = n_nodes[j]
-            coefficient_j = coefficient[j]
+        
+        # 定义被积函数
+        integrand = function(p, n)
             E_i = calculate_energy(mass_i, p, n, omega)
             log_term = calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
-            total += log_term * coefficient_j
+            return log_term
         end
+        
+        # 执行二维积分
+        contribution = integrate_2d(method, p_grid, n_grid, integrand)
+        total += contribution
     end
+    
     return total * (-T)
 end
 

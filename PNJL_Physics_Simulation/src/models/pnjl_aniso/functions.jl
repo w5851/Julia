@@ -12,7 +12,8 @@ using StaticArrays
 using FiniteDifferences
 using FastGaussQuadrature
 using ..MathUtils: safe_log
-using ..Integration: gauleg
+using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, AngleGrid,
+                             integrate_2d, MomentumGrid
 
 # 直接定义需要的常数和函数
 const π = 3.141592653589793
@@ -38,7 +39,7 @@ const K_f = K_Lam5 / Lambda_f^5
 const m0_q_f = m0_q / hc
 const m0_s_f = m0_s / hc
 
-function get_nodes(p_num::Int, t_num::Int)
+function get_nodes_aniso(p_num::Int, t_num::Int)
     """
     Generate integration nodes and weights for anisotropic PNJL model
     
@@ -72,7 +73,7 @@ function get_nodes(p_num::Int, t_num::Int)
     return nodes1, nodes2
 end
 
-@inline function calculate_chiral(phi)
+function calculate_chiral_aniso(T)
     """Calculate chiral condensate contribution"""
     term1 = 2 * G_f * sum(phi .^ 2) - 4 * K_f * prod(phi)
     return term1
@@ -130,39 +131,65 @@ end
 end
 
 @inline function calculate_energy_sum(masses, p_nodes, coefficient, t_nodes, xi)
-    """Calculate energy sum contribution"""
+    """Calculate energy sum contribution with anisotropy
+    
+    **DEPRECATED**: This function is deprecated. Use new integration interface instead.
+    """
+    # 创建二维网格
+    p_domain = (0.0, maximum(p_nodes))
+    p_grid = MomentumGrid(p_nodes, coefficient, p_domain, p_domain[2])
+    t_domain = (-1.0, 1.0)
+    t_grid = AngleGrid(t_nodes, ones(length(t_nodes)), t_domain)
+    
+    method = GaussLegendreIntegration()
     total = 0.0
     
-    @inbounds for i in eachindex(masses)
-        mass_i = masses[i]
-        
-        @inbounds @simd for j in eachindex(p_nodes)
-            p = p_nodes[j]
-            t = t_nodes[j]
-            coefficient_j = coefficient[j]
+    # 对每个质量计算贡献
+    @inbounds for mass_i in masses
+        # 定义被积函数
+        integrand = function(p, t)
             E = calculate_energy(mass_i, p, xi, t)
-            total += E * coefficient_j
+            return E
         end
+        
+        # 执行二维积分
+        contribution = integrate_2d(method, p_grid, t_grid, integrand)
+        total += contribution
     end
+    
     return total * (-Nc)
 end
 
 @inline function calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, t_nodes, xi)
-    """Calculate logarithmic sum contribution"""
+    """Calculate logarithmic sum contribution with anisotropy
+    
+    **DEPRECATED**: This function is deprecated. Use new integration interface instead.
+    """
+    # 创建二维网格
+    p_domain = (0.0, maximum(p_nodes))
+    p_grid = MomentumGrid(p_nodes, coefficient, p_domain, p_domain[2])
+    t_domain = (-1.0, 1.0)
+    t_grid = AngleGrid(t_nodes, ones(length(t_nodes)), t_domain)
+    
+    method = GaussLegendreIntegration()
     total = 0.0
     
-    @inbounds for i in eachindex(masses)
-        mass_i = masses[i]
+    # 对每个夸克味道计算贡献
+    @inbounds for (i, mass_i) in enumerate(masses)
         mu_i = mu[i]
-        @inbounds @simd for j in eachindex(p_nodes)
-            p = p_nodes[j]
-            t = t_nodes[j]
-            coefficient_j = coefficient[j]
+        
+        # 定义被积函数
+        integrand = function(p, t)
             E_i = calculate_energy(mass_i, p, xi, t)
             log_term = calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
-            total += log_term * coefficient_j
+            return log_term
         end
+        
+        # 执行二维积分
+        contribution = integrate_2d(method, p_grid, t_grid, integrand)
+        total += contribution
     end
+    
     return total * (-T)
 end
 

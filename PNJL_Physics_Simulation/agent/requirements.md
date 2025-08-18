@@ -1,7 +1,24 @@
 # PNJL 物理仿真项目需求文档
 
-## 项目状态概览
-- **项目阶段**: 功能优化和重构阶段
+## #### 2. Omega函数积分接口重构
+- **状态**: 阶段一完成，准备阶段二
+- **描述**: 重构Omega函数实现，采用独立积分接口设计
+- **文件**: `src/core/integration_interface.jl`, 各模型函数文件
+- **设计方案**: 
+  - 创建通用积分接口：输入(nodes, weights, functions) → 输出(numerical results)
+  - 将 `calculate_log_sum`, `calculate_energy_sum` 重构为标准积分调用
+  - 实现模块化的积分计算核心
+- **具体任务**:
+  - [x] 设计通用积分接口 `IntegrationInterface` 模块
+  - [x] 实现基础积分方法和网格系统
+  - [x] 实现物理专用积分函数
+  - [x] 创建完整的单元测试套件（36个测试全部通过）
+  - [ ] 重构 PNJL 模型的积分调用
+  - [ ] 重构 PNJL_aniso 模型的积分调用  
+  - [ ] 重构 Rotation 模型的积分调用
+  - [ ] 验证重构后的数值一致性
+- **预期完成时间**: 3-4天 (阶段一已完成)
+- **优先级**: 高 (架构改进的基础)*: 功能优化和重构阶段
 - **当前版本**: v1.0-dev
 - **最后更新**: 2025年8月18日
 
@@ -22,7 +39,25 @@
 - **责任人**: 开发者
 - **影响范围**: 核心计算稳定性
 
-#### 2. 有限差分步长优化
+#### 2. Omega函数积分接口重构
+- **状态**: 设计完成，准备实施
+- **描述**: 重构Omega函数实现，采用独立积分接口设计
+- **文件**: `src/core/integration.jl`, 各模型函数文件
+- **设计方案**: 
+  - 创建通用积分接口：输入(nodes, weights, functions) → 输出(numerical results)
+  - 将 `calculate_log_sum`, `calculate_energy_sum` 重构为标准积分调用
+  - 实现模块化的积分计算核心
+- **具体任务**:
+  - [ ] 设计通用积分接口 `IntegralInterface` 模块
+  - [ ] 重构 PNJL 模型的积分调用
+  - [ ] 重构 PNJL_aniso 模型的积分调用  
+  - [ ] 重构 Rotation 模型的积分调用
+  - [ ] 实现积分接口的单元测试
+  - [ ] 验证重构后的数值一致性
+- **预期完成时间**: 3-4天
+- **优先级**: 高 (架构改进的基础)
+
+#### 3. 有限差分步长优化
 - **状态**: 待开始
 - **描述**: 优化 `central_fdm` 方法的步长控制
 - **文件**: `Function_PNJL_aniso.jl`
@@ -32,11 +67,11 @@
   - [ ] 验证数值精度改进
   - [ ] 性能基准测试
 - **预期完成时间**: 2天
-- **依赖**: 数值稳定性修复完成
+- **依赖**: Omega函数积分接口重构完成
 
 ### 🟡 中优先级需求（重要）
 
-#### 3. 代码架构重构
+#### 4. 代码架构重构
 - **状态**: 设计阶段
 - **描述**: 将现有代码重构为高内聚低耦合的模块化架构
 - **具体任务**:
@@ -46,8 +81,9 @@
   - [ ] 定义统一的计算接口
 - **预期完成时间**: 1周
 - **影响范围**: 整个项目结构
+- **依赖**: Omega函数积分接口重构完成
 
-#### 4. 接口函数文档化
+#### 5. 接口函数文档化
 - **状态**: 待开始
 - **描述**: 为所有公开接口编写详细文档
 - **具体任务**:
@@ -84,6 +120,59 @@
 ## 具体功能需求
 
 ### 核心计算模块需求
+
+#### Omega函数积分接口重构
+**设计目标**: 创建通用、可复用的积分计算接口，解决当前代码中积分逻辑分散和重复的问题。
+
+**现状分析**:
+- `calculate_log_sum` 函数在3个模型中重复实现
+- 积分参数传递复杂：nodes, weights, coefficient 等多参数耦合
+- 物理计算与数值积分逻辑混合，难以测试和维护
+
+**重构方案**:
+```julia
+# 通用积分接口设计
+module IntegralInterface
+
+abstract type IntegrationMethod end
+struct GaussLegendre <: IntegrationMethod end
+
+# 核心积分接口
+function integrate(method::IntegrationMethod, 
+                  nodes::Vector, weights::Vector, 
+                  integrand::Function) 
+    return numerical_result
+end
+
+# 多维积分支持
+function integrate_2d(method::IntegrationMethod,
+                     p_nodes, p_weights, t_nodes, t_weights,
+                     integrand::Function)
+    return numerical_result
+end
+
+# PNJL模型特化
+function omega_thermal_contribution(masses::Vector, mu::Vector, T, Phi1, Phi2,
+                                  nodes, method::IntegrationMethod)
+    integrand = (p, i) -> begin
+        mass_i, mu_i = masses[i], mu[i]
+        E = calculate_energy(mass_i, p)
+        return calculate_log_term(E, mu_i, T, Phi1, Phi2)
+    end
+    
+    return sum(i -> integrate(method, nodes[1], nodes[2], 
+                             p -> integrand(p, i)), eachindex(masses)) * (-T)
+end
+
+end
+```
+
+**实现步骤**:
+1. 创建 `src/core/integration_interface.jl` 模块
+2. 重构现有 `calculate_log_sum`, `calculate_energy_sum` 为接口调用  
+3. 统一节点权重管理：`get_nodes()` → `IntegrationGrid`
+4. 实现向后兼容的包装函数
+5. 添加完整的单元测试覆盖
 
 #### 安全数学函数库
 ```julia
