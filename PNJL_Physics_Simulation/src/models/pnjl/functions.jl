@@ -18,16 +18,10 @@ using ..MathUtils: safe_log
 using ..Integration: gauleg  # Import Integration module
 using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
                              omega_thermal_integral, vacuum_energy_integral
+using ..UnifiedConstants: physics_pi, hc, rho0, T0, Nc, Lambda
 
-# 直接定义需要的常数和函数
-const π = 3.141592653589793
-const hc = 197.33
-
-# 从 PNJLConstants 导入
-const rho0 = 0.16
-const T0 = 210 / hc
-const Nc = 3.0
-const Lambda = 602.3
+# Use unified constants (avoid redefinition)
+const π = physics_pi
 const G_Lam2 = 1.835
 const K_Lam5 = 12.36
 const m0_q = 5.5

@@ -26,7 +26,8 @@ export IntegrationMethod, IntegrationGrid,
        MomentumGrid, AngleGrid, ProductGrid,
        integrate, integrate_2d, integrate_vectorized,
        omega_thermal_integral, vacuum_energy_integral,
-       create_momentum_grid, create_angle_grid, create_product_grid
+       create_momentum_grid, create_angle_grid, create_product_grid,
+       create_angular_momentum_grid
 
 # ============================================================================
 # 抽象类型定义
@@ -452,6 +453,47 @@ function create_angle_grid(n_points::Int)
     nodes, weights = _gauss_legendre_nodes_weights(n_points, -1.0, 1.0)
     
     return AngleGrid(nodes, weights, (-1.0, 1.0))
+end
+
+"""
+    create_angular_momentum_grid(n_points::Int) -> AngleGrid
+
+创建角动量量子化网格，用于旋转系统中的角动量求和。
+
+在PNJL旋转模型中，角动量是量子化的，采用分立的角动量量子数l。
+这个函数创建适合角动量求和的网格。
+
+# Arguments
+- `n_points::Int`: 角动量量子数的最大值 (l_max)
+
+# Returns
+- `AngleGrid`: 角动量网格，包含l=0,1,2,...,l_max的点
+
+# Physical Background
+在有限角速度下，夸克的角动量沿旋转轴方向量子化：
+- l_z = 0, ±1/2, ±1, ±3/2, ..., 这里简化为整数值
+- 权重来自于角动量态的统计权重 (2l+1)
+
+# Example
+```julia
+l_grid = create_angular_momentum_grid(10)  # l = 0, 1, 2, ..., 10
+```
+"""
+function create_angular_momentum_grid(n_points::Int)
+    # 角动量量子数：l = 0, 1, 2, ..., n_points-1
+    nodes = Float64.(0:(n_points-1))
+    
+    # 角动量态的统计权重：2l + 1
+    weights = Float64[2.0 * l + 1.0 for l in nodes]
+    
+    # 归一化权重（可选，取决于具体应用）
+    total_weight = sum(weights)
+    weights ./= total_weight
+    
+    # 定义域为离散的整数集合
+    domain = (0.0, Float64(n_points - 1))
+    
+    return AngleGrid(nodes, weights, domain)
 end
 
 """

@@ -50,7 +50,9 @@ struct PNJLAnisoConfig <: ModelConfig
 end
 
 """
-Rotation模型配置
+Rotation模型配置，扩展基础PNJL配置以支持旋转效应
+
+包含角速度、角动量量子化、旋转相关的热力学参数等。
 """
 struct RotationConfig <: ModelConfig
     momentum_cutoff::Float64
@@ -58,11 +60,19 @@ struct RotationConfig <: ModelConfig
     n_angular_points::Int
     temperature::Float64
     chemical_potentials::Vector{Float64}
-    angular_velocity::Float64
+    polyakov_fields::Tuple{Float64, Float64}
     
-    function RotationConfig(;cutoff=10.0, n_p=64, n_l=32, T=0.15,
-                          mu=[0.32, 0.32, 0.32], Omega=0.05)
-        new(cutoff, n_p, n_l, T, mu, Omega)
+    # Rotation-specific parameters
+    angular_velocity::Float64      # 角速度 Ω (fm⁻¹)
+    max_angular_momentum::Int      # 最大角动量量子数
+    bessel_truncation::Int         # 贝塞尔函数截断阶数
+    rotation_coefficients::Dict{String, Vector{Float64}}  # 旋转修正系数
+    
+    function RotationConfig(;cutoff=20.0, n_p=64, n_l=10, T=0.15, mu=[0.32, 0.32, 0.32],
+                          Phi=(0.5, 0.5), omega=0.05, l_max=10, bessel_max=20,
+                          coeffs=Dict("a"=>[1.0, 0.1, 0.01], "b"=>[1.0, 0.05, 0.001], 
+                                     "c"=>[0.5, 0.02, 0.0001], "d"=>[0.0, 0.1, 0.01]))
+        new(cutoff, n_p, n_l, T, mu, Phi, omega, l_max, bessel_max, coeffs)
     end
 end
 

@@ -12,26 +12,13 @@ using StaticArrays
 using FiniteDifferences
 using FastGaussQuadrature
 using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, 
-                             integrate_2d, MomentumGrid, AngleGrid
+                             integrate_2d, MomentumGrid, AngleGrid,
+                             create_angular_momentum_grid
+using ..UnifiedConstants: physics_pi, hc, rho0, T0, Nc, Lambda, G_Lam2, K_Lam5, 
+                         m0_q, m0_s, m0_q_f, m0_s_f, Lambda_f, G_f, K_f
 
-# 直接定义需要的常数和函数
-const π = 3.141592653589793
-const hc = 197.33
-
-# 从 RotationConstants 导入常数
-const rho0 = 0.16
-const T0 = 270 / hc
-const Nc = 3.0
-const Lambda = 650.0
-const G_Lam2 = 4.93 / 1e6
-const K_Lam5 = 12.36
-const m0_q = 5.0
-const m0_s = 5.0
-const m0_q_f = m0_q / hc
-const m0_s_f = m0_s / hc
-const Lambda_f = Lambda / hc
-const G_f = G_Lam2 * hc^2
-const K_f = K_Lam5 / Lambda_f^5
+# Use unified constants (avoid redefinition)
+const π = physics_pi
 const a0 = 6.75
 const a1 = -1.95
 const a2 = 2.625
@@ -121,7 +108,7 @@ end
     return term1
 end
 
-@inline function calculate_U(T, Phi1, Phi2)
+@inline function calculate_U_rotation(T, Phi1, Phi2)
     """Calculate standard Polyakov-loop potential (non-rotation dependent)"""
     T_ratio = T0 / T
     T_b2 = a0 + a1 * T_ratio + a2 * T_ratio^2 + a3 * T_ratio^3
@@ -129,12 +116,12 @@ end
     return T^4 * poly
 end
 
-@inline function calculate_mass(phi)
+@inline function calculate_mass_rotation(phi)
     """Calculate effective mass for rotation model (single flavor)"""
     return m0_q_f - 2.0 * G_f * phi
 end
 
-@inline function calculate_energy(mass, p, n, omega)
+@inline function calculate_energy_rotation(mass, p, n, omega)
     """Calculate energy with rotation effects"""
     p2 = p^2
     mass2 = mass^2
@@ -159,7 +146,7 @@ end
     return f2
 end
 
-@inline function calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
+@inline function calculate_log_term_rotation(E, mu, T, Phi1, Phi2)
     """Calculate logarithmic contribution for rotation model"""
     f1 = AA(E_i - mu_i, T, Phi1, Phi2)
     f2 = AA(-E_i - mu_i, T, Phi1, Phi2)
@@ -168,7 +155,7 @@ end
     return log(f1) + log(f2) + log(f3) + log(f4)
 end
 
-@inline function calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, n_nodes, omega)
+@inline function calculate_log_sum_rotation(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, n_nodes, omega)
     """Calculate logarithmic sum for rotation model
     
     **DEPRECATED**: This function is deprecated. Use new integration interface instead.
@@ -190,8 +177,8 @@ end
         
         # 定义被积函数
         integrand = function(p, n)
-            E_i = calculate_energy(mass_i, p, n, omega)
-            log_term = calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
+            E_i = calculate_energy_rotation(mass_i, p, n, omega)
+            log_term = calculate_log_term_rotation(E_i, mu_i, T, Phi1, Phi2)
             return log_term
         end
         
@@ -240,7 +227,7 @@ function calc_U(T, Phi1, Phi2, omega)
     return T^4 * term
 end
 
-function calculate_pressure(phi, Phi1, Phi2, mu, T, nodes1, omega)
+function calculate_pressure_rotation(phi, Phi1, Phi2, mu, T, nodes1, omega)
     """
     Calculate pressure for rotation model
     
@@ -261,12 +248,12 @@ function calculate_pressure(phi, Phi1, Phi2, mu, T, nodes1, omega)
     coef2 = @view nodes1[3][:]
 
     chi = calculate_chiral(phi)
-    U = calculate_U(T, Phi1, Phi2)
+    U = calculate_U_rotation(T, Phi1, Phi2)
     
-    masses = [calculate_mass(phi)]  # Single flavor as array
+    masses = [calculate_mass_rotation(phi)]  # Single flavor as array
     
     # Calculate log part
-    log_sum = calculate_log_sum(masses, p_nodes2, Phi1, Phi2, [mu], T, coef2, n_nodes2, omega)
+    log_sum = calculate_log_sum_rotation(masses, p_nodes2, Phi1, Phi2, [mu], T, coef2, n_nodes2, omega)
     
     return -(chi + U + log_sum)
 end

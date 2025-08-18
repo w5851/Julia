@@ -63,11 +63,11 @@ function get_nodes(n_p)
 end
 
 """
-    calculate_mass(gσ, gδ)
+    calculate_mass_gas_liquid(gσ, gδ)
 
 Calculate effective masses for protons and neutrons.
 """
-@inline function calculate_mass(gσ, gδ)
+@inline function calculate_mass_gas_liquid(gσ, gδ)
     m_p = m - gσ - gδ
     m_n = m - gσ + gδ
     return m_p, m_n
@@ -79,7 +79,7 @@ end
 Calculate energy dispersion relations for protons and neutrons.
 """
 @inline function calculate_energy(gσ, gδ, p_nodes)
-    m_p, m_n = calculate_mass(gσ, gδ)
+    m_p, m_n = calculate_mass_gas_liquid(gσ, gδ)
     p2 = @. p_nodes^2
     E_p = @. sqrt(p2 + m_p^2)
     E_n = @. sqrt(p2 + m_n^2)
@@ -213,7 +213,7 @@ function calculate_fun_constraint(x, nodes, couplings, params)
     T = params[1]
     μ_B = params[2]
     
-    m_p, m_n = calculate_mass(gσ, gδ)
+    m_p, m_n = calculate_mass_gas_liquid(gσ, gδ)
     E_p, E_n = calculate_energy(gσ, gδ, p_nodes)
     ρ_p = calculate_ρ(E_p, μ_p, T, coefficient)
     ρ_n = calculate_ρ(E_n, μ_n, T, coefficient)

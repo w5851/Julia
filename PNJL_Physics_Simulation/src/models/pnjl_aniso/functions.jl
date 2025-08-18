@@ -79,7 +79,7 @@ function calculate_chiral_aniso(T)
     return term1
 end
 
-@inline function calculate_U(T, Phi1, Phi2)
+@inline function calculate_U_aniso(T, Phi1, Phi2)
     """Calculate Polyakov-loop potential"""
     T_ratio = T0 / T
     Ta = a0 + a1 * T_ratio + a2 * T_ratio^2
@@ -101,7 +101,7 @@ end
     )
 end
 
-@inline function calculate_energy(mass_i, p, xi, t)
+@inline function calculate_energy_aniso(mass_i, p, xi, t)
     """Calculate energy with anisotropy parameter xi"""
     p2 = p^2
     mass_i2 = mass_i^2
@@ -109,7 +109,7 @@ end
     return sqrt(p2 + mass_i2 + term_xi)
 end
 
-@inline function calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
+@inline function calculate_log_term_aniso(E, mu, T, Phi1, Phi2)
     """Calculate logarithmic term for thermal distribution"""
     invT = 1.0 / T
     x_i = (E_i - mu_i) * invT
@@ -148,7 +148,7 @@ end
     @inbounds for mass_i in masses
         # 定义被积函数
         integrand = function(p, t)
-            E = calculate_energy(mass_i, p, xi, t)
+            E = calculate_energy_aniso(mass_i, p, xi, t)
             return E
         end
         
@@ -160,7 +160,7 @@ end
     return total * (-Nc)
 end
 
-@inline function calculate_log_sum(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, t_nodes, xi)
+@inline function calculate_log_sum_aniso(masses, p_nodes, Phi1, Phi2, mu, T, coefficient, t_nodes, xi)
     """Calculate logarithmic sum contribution with anisotropy
     
     **DEPRECATED**: This function is deprecated. Use new integration interface instead.
@@ -180,8 +180,8 @@ end
         
         # 定义被积函数
         integrand = function(p, t)
-            E_i = calculate_energy(mass_i, p, xi, t)
-            log_term = calculate_log_term(E_i, mu_i, T, Phi1, Phi2)
+            E_i = calculate_energy_aniso(mass_i, p, xi, t)
+            log_term = calculate_log_term_aniso(E_i, mu_i, T, Phi1, Phi2)
             return log_term
         end
         
@@ -193,7 +193,7 @@ end
     return total * (-T)
 end
 
-function calculate_pressure(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
+function calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
     """
     Calculate pressure = -omega for anisotropic PNJL model
     
@@ -217,11 +217,11 @@ function calculate_pressure(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
     coef2 = @view nodes_2[3][:]
 
     chi = calculate_chiral(phi)
-    U = calculate_U(T, Phi1, Phi2)
+    U = calculate_U_aniso(T, Phi1, Phi2)
     
     masses = calculate_mass_vec(phi)
     energy_sum = calculate_energy_sum(masses, p_nodes1, coef1, t_nodes1, xi)
-    log_sum = calculate_log_sum(masses, p_nodes2, Phi1, Phi2, mu, T, coef2, t_nodes2, xi)
+    log_sum = calculate_log_sum_aniso(masses, p_nodes2, Phi1, Phi2, mu, T, coef2, t_nodes2, xi)
     
     return -(chi + U + energy_sum + log_sum)
 end
