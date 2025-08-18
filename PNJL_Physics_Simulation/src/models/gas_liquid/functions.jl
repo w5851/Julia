@@ -13,6 +13,10 @@ using NLsolve
 using FiniteDifferences
 using BenchmarkTools
 
+# Import the new IntegrationInterface
+using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
+                             integrate, create_momentum_grid
+
 # 直接定义需要的常数和函数
 const π = 3.141592653589793
 const hc = 197.33
@@ -94,6 +98,23 @@ Calculate baryon number density.
 end
 
 """
+    calculate_ρ_new(mass, μ, T, grid::MomentumGrid)
+
+Calculate baryon number density using new integration interface.
+"""
+function calculate_ρ_new(mass, μ, T, grid::MomentumGrid)
+    method = GaussLegendreIntegration()
+    
+    integrand = function(p)
+        E = sqrt(p^2 + mass^2)
+        return (fermion_distribution(E, μ, T) - 
+                fermion_anti_distribution(E, μ, T)) * p^2 / π^2
+    end
+    
+    return integrate(method, grid, integrand)
+end
+
+"""
     calculate_ρ_s(E, μ, T, coef, m)
 
 Calculate scalar density.
@@ -102,6 +123,23 @@ Calculate scalar density.
     return mapreduce(i -> (fermion_distribution(E[i], μ, T) + 
                           fermion_anti_distribution(E[i], μ, T)) * coef[i] * m / E[i], 
                     +, eachindex(E))
+end
+
+"""
+    calculate_ρ_s_new(mass, μ, T, grid::MomentumGrid)
+
+Calculate scalar density using new integration interface.
+"""
+function calculate_ρ_s_new(mass, μ, T, grid::MomentumGrid)
+    method = GaussLegendreIntegration()
+    
+    integrand = function(p)
+        E = sqrt(p^2 + mass^2)
+        return (fermion_distribution(E, μ, T) + 
+                fermion_anti_distribution(E, μ, T)) * mass / E * p^2 / π^2
+    end
+    
+    return integrate(method, grid, integrand)
 end
 
 """
