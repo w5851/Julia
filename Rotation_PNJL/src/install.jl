@@ -1,0 +1,12 @@
+import Pkg
+#Pkg.add("BenchmarkTools")
+#Pkg.add("ThreadsX")
+#Pkg.add("ReverseDiff")
+#Pkg.add("HomotopyContinuation")
+#Pkg.add("CSV")
+#Pkg.add("DataFrames")
+#Pkg.add("DelimitedFiles")
+#Pkg.add("NonlinearSolve")
+#Pkg.add("ImplicitDifferentiation")
+#Pkg.add("FiniteDifferences")
+#Pkg.add("QuadGK")
