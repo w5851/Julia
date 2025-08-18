@@ -16,10 +16,8 @@ using BenchmarkTools
 # Import the new IntegrationInterface
 using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
                              integrate, create_momentum_grid
-
-# 直接定义需要的常数和函数
-const π = 3.141592653589793
-const hc = 197.33
+using ..PhysicalConstants: hc
+using ..GasLiquidConstants: m, mσ, mω, mρ, mδ, rho0_default, calculate_couplings
 
 # 简化的积分函数
 function gauleg(a, b, n)
@@ -38,12 +36,7 @@ end
     return 1 / (exp((E + μ) / T) + 1)
 end
 
-# 从 GasLiquidConstants 导入
-const m = 939.0 / hc      # Nucleon mass
-const mσ = 550.0 / hc     # Sigma meson mass
-const mω = 783.0 / hc     # Omega meson mass  
-const mρ = 775.0 / hc     # Rho meson mass
-const mδ = 980.0 / hc     # Delta meson mass
+# All constants are now imported from respective modules
 
 export get_nodes, calculate_mass, calculate_energy, calculate_ρ, calculate_ρ_s,
        calculate_σ_term, calculate_δ_term, calculate_ρ_term, calculate_ω_term,

@@ -4,6 +4,7 @@ Rotation Model Functions
 This module implements the PNJL model with rotation effects, including
 Bessel function integration and angular momentum quantization.
 """
+module RotationFunctions
 
 using SpecialFunctions: log, exp, besselj
 using ForwardDiff
@@ -313,3 +314,5 @@ function calculate_angular_momentum(phi, T, omega, nodes1)
     # This is a placeholder for the complete implementation
     return 0.0  # Placeholder
 end
+
+end  # module RotationFunctions

@@ -4,6 +4,7 @@ PNJL Anisotropic Model Functions
 This module implements the anisotropic PNJL model functions based on the original
 Function_PNJL_aniso.jl with momentum-dependent anisotropy effects.
 """
+module PNJLAnisoFunctions
 
 using SpecialFunctions: log, exp
 using ForwardDiff
@@ -12,32 +13,14 @@ using StaticArrays
 using FiniteDifferences
 using FastGaussQuadrature
 using ..MathUtils: safe_log
+using ..Integration: gauleg
+using ..PhysicalConstants: hc, Nc
+using ..PNJLAnisoConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
+                           a0, a1, a2, b3, b4
 using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, AngleGrid,
                              integrate_2d, MomentumGrid
 
-# 直接定义需要的常数和函数
-const π = 3.141592653589793
-const hc = 197.33
-
-# 从 PNJLAnisoConstants 导入常数
-const rho0 = 0.16
-const a0 = 6.75
-const a1 = -1.95
-const a2 = 2.625
-const b3 = 0.75
-const b4 = 7.5
-const T0 = 210 / hc
-const Nc = 3.0
-const Lambda = 602.3
-const G_Lam2 = 1.835
-const K_Lam5 = 12.36
-const m0_q = 5.5
-const m0_s = 140.7
-const Lambda_f = Lambda / hc
-const G_f = G_Lam2 / Lambda_f^2
-const K_f = K_Lam5 / Lambda_f^5
-const m0_q_f = m0_q / hc
-const m0_s_f = m0_s / hc
+# All constants are now imported from respective modules
 
 function get_nodes_aniso(p_num::Int, t_num::Int)
     """
@@ -404,3 +387,5 @@ function Trho_optimized(T_start, T_end, T_step, rho_start, rho_end, rho_step;
         return results
     end
 end
+
+end  # module PNJLAnisoFunctions

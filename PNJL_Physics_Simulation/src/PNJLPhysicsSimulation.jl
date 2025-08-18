@@ -29,10 +29,10 @@ include("core/model_configuration.jl")
 
 # Export everything for now to test
 export PhysicalConstants, Integration, IntegrationInterface, ModelConfiguration, 
-       UnifiedConstants, FunctionRegistry, 
-       Thermodynamics, MathUtils,
+       FunctionRegistry, Thermodynamics, MathUtils,
        GasLiquidConstants, GasLiquidFunctions,
        PNJLConstants, PNJLFunctions, 
-       PNJLAnisoConstants, RotationConstants
+       PNJLAnisoConstants, PNJLAnisoFunctions,
+       RotationConstants, RotationFunctions
 
 end  # module PNJLPhysicsSimulation
