@@ -18,25 +18,12 @@ using ..MathUtils: safe_log
 using ..Integration: gauleg  # Import Integration module
 using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
                              omega_thermal_integral, vacuum_energy_integral
-using ..UnifiedConstants: physics_pi, hc, rho0, T0, Nc, Lambda
+using ..PhysicalConstants: hc, Nc
+using ..PNJLConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
+                      a0, a1, a2, b3, b4
 
-# Use unified constants (avoid redefinition)
-const π = physics_pi
-const G_Lam2 = 1.835
-const K_Lam5 = 12.36
-const m0_q = 5.5
-const m0_s = 140.7
-const Lambda_f = Lambda / hc
-const G_f = G_Lam2 / Lambda_f^2
-const K_f = K_Lam5 / Lambda_f^5
-const m0_q_f = m0_q / hc
-const m0_s_f = m0_s / hc
-const m0 = [m0_q_f, m0_q_f, m0_s_f]
-const a0 = 3.51
-const a1 = -2.47
-const a2 = 15.2
-const b3 = -1.75
-const b4 = 7.5
+# All constants are now imported from PNJLConstants module
+
 
 export get_nodes, calculate_chiral, calculate_U, calculate_mass_vec,
        calculate_energy, calculate_log_term, calculate_pressure,

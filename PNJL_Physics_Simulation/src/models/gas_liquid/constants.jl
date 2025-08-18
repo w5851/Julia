@@ -1,27 +1,24 @@
 """
 Constants and parameters for the Gas-Liquid phase transition model.
 
-This module contains all physical constants, particle masses, and 
-coupling calculation functions specific to the Gas-Liquid model.
+This module contains only Gas-Liquid model-specific constants and parameters.
+Universal physical constants are imported from PhysicalConstants.
 """
 module GasLiquidConstants
 
-# 直接定义常数，避免复杂的模块依赖
-const π = 3.141592653589793
-const hc = 197.33
-using SpecialFunctions: log, exp
+using ...PhysicalConstants: hc, MeV_to_fm_inv
+
+export m, mσ, mω, mρ, mδ, rho0_default, calculate_couplings
 
 # Particle masses (MeV converted to fm⁻¹)
-const m = 939.0 / hc      # Nucleon mass
-const mσ = 550.0 / hc     # Sigma meson mass
-const mω = 783.0 / hc     # Omega meson mass  
-const mρ = 775.0 / hc     # Rho meson mass
-const mδ = 980.0 / hc     # Delta meson mass
+const m = MeV_to_fm_inv(939.0)    # Nucleon mass
+const mσ = MeV_to_fm_inv(550.0)   # Sigma meson mass
+const mω = MeV_to_fm_inv(783.0)   # Omega meson mass  
+const mρ = MeV_to_fm_inv(775.0)   # Rho meson mass
+const mδ = MeV_to_fm_inv(980.0)   # Delta meson mass
 
-# Nuclear matter properties
+# Nuclear matter properties specific to Gas-Liquid model
 const rho0_default = 0.16  # Nuclear saturation density (fm⁻³)
-
-export m, mσ, mω, mρ, mδ, rho0_default
 
 """
     calculate_couplings(ρ0, B_A, K, m_ratio, E_sym)

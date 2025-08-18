@@ -9,10 +9,9 @@ module PNJLPhysicsSimulation
 include("core/constants.jl")
 include("core/math_utils.jl")
 include("core/integration.jl")
-include("core/unified_constants.jl")  # New unified constants
 include("core/integration_interface.jl")
 include("core/thermodynamics.jl")
-include("core/function_registry.jl")  # New function registry
+include("core/function_registry.jl")  # Function registry
 
 # Model modules - must be included before the unified interface
 include("models/gas_liquid/constants.jl")

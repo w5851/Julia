@@ -1,18 +1,16 @@
 """
-Common physical constants and unit conversions.
+Universal Physical Constants
 
-This module provides fundamental physical constants and conversion factors
-used throughout the PNJL physics simulation package.
+This module provides fundamental physical constants used across all physics models.
+Only includes truly universal constants - model-specific parameters are in their respective modules.
 """
 module PhysicalConstants
 
-export π, hc, MeV_to_fm_inv
+export hc, Nc, MeV_to_fm_inv
 
-# Mathematical constants
-const π = 3.141592653589793
-
-# Physical constants
-const hc = 197.33  # MeV⋅fm (ℏc conversion factor)
+# Universal physical constants
+const hc = 197.33  # ℏc (MeV⋅fm) - conversion factor between natural and SI units
+const Nc = 3       # Number of colors in QCD (universal gauge theory constant)
 
 # Unit conversion functions
 """

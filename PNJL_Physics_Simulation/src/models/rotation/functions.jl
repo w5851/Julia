@@ -14,27 +14,11 @@ using FastGaussQuadrature
 using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, 
                              integrate_2d, MomentumGrid, AngleGrid,
                              create_angular_momentum_grid
-using ..UnifiedConstants: physics_pi, hc, rho0, T0, Nc, Lambda, G_Lam2, K_Lam5, 
-                         m0_q, m0_s, m0_q_f, m0_s_f, Lambda_f, G_f, K_f
+using ..PhysicalConstants: hc, Nc
+using ..RotationConstants: rho0, T0, Lambda_f, G_f, K_f, m0_q_f, m0_s_f, r0, C, coefficients,
+                         a0, a1, a2, a3, b3, b4
 
-# Use unified constants (avoid redefinition)
-const π = physics_pi
-const a0 = 6.75
-const a1 = -1.95
-const a2 = 2.625
-const a3 = -7.44
-const b3 = 0.75
-const b4 = 7.5
-const r0 = 1.2
-const C = 0.5
-
-# Rotation-dependent coefficients
-const coefficients = Dict{String, Vector{Float64}}(
-    "a" => [1.0, 0.1, 0.01],
-    "b" => [1.0, 0.05, 0.001],
-    "c" => [0.5, 0.02, 0.0001],
-    "d" => [0.0, 0.1, 0.01]
-)
+# All constants are now imported from RotationConstants module
 
 function init_bessel(p, theta, n, w)
     """

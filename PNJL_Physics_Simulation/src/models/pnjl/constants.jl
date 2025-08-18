@@ -1,26 +1,23 @@
 """
 Constants and parameters for the PNJL (Polyakov-Nambu-Jona-Lasinio) model.
 
-This module contains all physical constants and model parameters
-specific to the PNJL model for QCD phase transitions.
+This module contains only PNJL model-specific constants and parameters.
+Universal physical constants are imported from PhysicalConstants.
 """
 module PNJLConstants
 
-# 直接定义常数
-const π = 3.141592653589793
-const hc = 197.33
-MeV_to_fm_inv(energy_MeV) = energy_MeV / hc
+using ...PhysicalConstants: hc, Nc, MeV_to_fm_inv
 
-# Nuclear matter properties
+export rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f
+export a0, a1, a2, b3, b4
+
+# Nuclear matter properties for PNJL model
 const rho0 = 0.16  # Nuclear saturation density (fm⁻³)
 
-# Polyakov loop parameters
-const T0 = 210 / hc  # Critical temperature (fm⁻¹)
+# Polyakov loop parameters for PNJL
+const T0 = MeV_to_fm_inv(210)  # Critical temperature (fm⁻¹)
 
-# Color degrees of freedom
-const Nc = 3.0
-
-# Model parameters (in MeV, then converted to natural units)
+# PNJL model parameters (in MeV, then converted to natural units)
 const Lambda = 602.3      # Cutoff parameter (MeV)
 const G_Lam2 = 1.835      # Four-fermion coupling strength
 const K_Lam5 = 12.36      # Six-fermion coupling strength
@@ -45,9 +42,6 @@ const a0 = 3.51
 const a1 = -2.47
 const a2 = 15.2
 const b3 = -1.75
-const b4 = 7.5
-
-export rho0, T0, Nc, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
-       a0, a1, a2, b3, b4
+const b4 = 7.555
 
 end  # module PNJLConstants
