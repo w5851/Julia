@@ -12,6 +12,7 @@ include("core/integration.jl")
 include("core/integration_interface.jl")
 include("core/thermodynamics.jl")
 include("core/function_registry.jl")  # 函数注册表
+include("core/automatic_differentiation.jl")  # 专门的自动微分模块
 
 # 模型模块 - 必须在统一接口之前包含
 include("models/gas_liquid/constants.jl")
@@ -30,7 +31,7 @@ include("core/unified_physics_public_interface.jl")  # 新的通用公共接口
 
 # 导出核心功能和接口
 export PhysicalConstants, Integration, IntegrationInterface, ModelConfiguration, 
-       FunctionRegistry, Thermodynamics, MathUtils,
+       FunctionRegistry, Thermodynamics, MathUtils, AutomaticDifferentiation,
        GasLiquidConstants, GasLiquidFunctions,
        PNJLConstants, PNJLFunctions, 
        PNJLAnisoConstants, PNJLAnisoFunctions,

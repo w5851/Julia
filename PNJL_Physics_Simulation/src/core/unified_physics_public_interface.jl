@@ -15,88 +15,26 @@
 """
 module UnifiedPhysicsPublicInterface
 
-using ForwardDiff
 using NLsolve
 using DelimitedFiles
 using Dates
 using ..ModelConfiguration
 using ..UnifiedPhysicsInterface
 using ..MathUtils
+using ..AutomaticDifferentiation
 
 export 
-    # Interface 1: 自动微分接口
-    calculate_derivatives, calculate_equilibrium_conditions,
-    # Interface 2: 方程组求解接口  
+    # Interface 1: 方程组求解接口  
     solve_equilibrium_equations, EquilibriumSolution,
-    # Interface 3: 物理量计算接口
+    # Interface 2: 物理量计算接口
     calculate_physical_properties, PhysicalProperties,
-    # Interface 4: 相图扫描接口
-    scan_phase_diagram, PhasePoint, save_phase_diagram
+    # Interface 3: 相图扫描接口
+    scan_phase_diagram, PhasePoint, save_phase_diagram,
+    # 重新导出自动微分接口
+    compute_gradient, compute_hessian, check_equilibrium_conditions
 
 # ============================================================================
-# Interface 1: 通用自动微分接口
-# ============================================================================
-
-"""
-    calculate_derivatives(thermodynamic_potential, variables, config::ModelConfig)
-
-计算热力学势对指定变量的偏导数（梯度）
-
-# 参数
-- `thermodynamic_potential`: 热力学势函数，接受变量向量和配置参数
-- `variables`: 变量向量，通常包含 [φᵤ, φₐ, φₛ, Φ₁, Φ₂]
-- `config`: 模型配置对象
-
-# 返回
-- 梯度向量，与输入变量向量同维度
-
-# 示例
-```julia
-# 对于PNJL各向异性模型
-config = PNJLAnisoConfig(T=0.15, mu=[0.3, 0.3, 0.3])
-variables = [0.1, 0.1, 0.2, 0.5, 0.5]  # [φᵤ, φₐ, φₛ, Φ₁, Φ₂]
-
-# 定义热力学势函数
-omega_func = x -> calculate_omega_total(x, config)
-
-# 计算偏导数
-gradients = calculate_derivatives(omega_func, variables, config)
-```
-"""
-function calculate_derivatives(thermodynamic_potential, variables::Vector{T}, config::ModelConfig) where T<:Real
-    try
-        gradient = ForwardDiff.gradient(thermodynamic_potential, variables)
-        return gradient
-    catch e
-        error("自动微分计算失败: $e\\n请检查热力学势函数是否支持ForwardDiff")
-    end
-end
-
-"""
-    calculate_equilibrium_conditions(thermodynamic_potential, variables, config::ModelConfig; tolerance=1e-8)
-
-计算平衡态条件（所有偏导数为零的条件）
-
-# 返回
-- `is_equilibrium`: 是否处于平衡态
-- `max_derivative`: 最大偏导数的绝对值
-- `gradients`: 所有偏导数
-"""
-function calculate_equilibrium_conditions(thermodynamic_potential, variables::Vector{T}, 
-                                        config::ModelConfig; tolerance::Float64=1e-8) where T<:Real
-    gradients = calculate_derivatives(thermodynamic_potential, variables, config)
-    max_derivative = maximum(abs.(gradients))
-    is_equilibrium = max_derivative < tolerance
-    
-    return (
-        is_equilibrium = is_equilibrium,
-        max_derivative = max_derivative,
-        gradients = gradients
-    )
-end
-
-# ============================================================================
-# Interface 2: 通用方程组求解接口
+# Interface 1: 通用方程组求解接口
 # ============================================================================
 
 """
@@ -186,8 +124,8 @@ end
 """
 function solve_equilibrium_equations(thermodynamic_potential, initial_guess::Vector{T}, 
                                    config::ModelConfig; kwargs...) where T<:Real
-    # 创建方程组函数
-    equation_system = (x, conf) -> calculate_derivatives(thermodynamic_potential, x, conf)
+    # 创建方程组函数，使用新的自动微分模块
+    equation_system = (x, conf) -> compute_gradient(thermodynamic_potential, x, conf)
     
     return solve_equilibrium_equations(equation_system, initial_guess, config; kwargs...)
 end
@@ -277,15 +215,13 @@ function calculate_physical_properties(solution_variables::Vector{T}, config::Mo
         
         # 重子密度: ρ_B = -∂Ω/∂μ_B
         if hasfield(typeof(config), :chemical_potentials)
-            # 通过化学势导数计算密度
-            mu_derivative_func = mu -> begin
-                temp_config = _update_chemical_potential(config, mu)
-                thermodynamic_potential_mu = x -> thermodynamic_potential(x)  # 简化
-                return thermodynamic_potential_mu(solution_variables)
-            end
-            
+            # 通过化学势导数计算密度，使用新的自动微分模块
             try
-                baryon_density = -ForwardDiff.derivative(mu_derivative_func, config.chemical_potentials[1])
+                # 使用新的化学势导数计算接口
+                dOmega_dmu = compute_chemical_potential_derivatives(
+                    thermodynamic_potential, solution_variables, config.chemical_potentials, config
+                )
+                baryon_density = -dOmega_dmu[1]  # 第一个化学势对应重子密度
             catch
                 baryon_density = zero(T)
             end
