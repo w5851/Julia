@@ -33,7 +33,8 @@ using ..PhysicalConstants: hc, Nc
 using ..PNJLAnisoConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
                            a0, a1, a2, b3, b4
 using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, AngleGrid,
-                             integrate_2d, MomentumGrid, create_momentum_grid, create_angle_grid
+                             integrate_2d, MomentumGrid, create_momentum_grid, create_angle_grid,
+                             discrete_sum
 
 # ============================================================================
 # 核心物理函数 - 基于Omega公式的精确实现
@@ -159,7 +160,7 @@ end
 """
     calculate_omega_vacuum(masses, xi, p_grid, t_grid, method=GaussLegendreIntegration())
 
-基于omega公式实现真空贡献计算。
+基于omega公式实现真空贡献计算，使用discrete_sum接口处理夸克味求和。
 
 物理公式:
 Ω_vac = -g_spin * N_c * Σ_f ∫_0^Λf dp ∫_{-1}^1 dt (p^2/(2π^2)) E_f(p,t)
@@ -167,23 +168,24 @@ end
 其中:
 - E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2) (各向异性能量)
 - g_spin = 2, N_c = 3 (物理常数)
+- Σ_f 表示对夸克味的离散求和，使用discrete_sum接口实现
 """
 function calculate_omega_vacuum(masses::AbstractVector{T}, xi::T,
                                p_grid::MomentumGrid, t_grid::AngleGrid,
                                method=GaussLegendreIntegration()) where T<:Real
     
-    total_energy = zero(T)
     g_spin = 2
     N_c = 3
     
-    # 按照omega公式: Σ_f ∫∫ 被积函数_f(p,t)
-    @inbounds for mass_f in masses
+    # 使用discrete_sum接口处理夸克味求和: Σ_f ∫∫ 被积函数_f(p,t)
+    total_energy = discrete_sum(1:length(masses)) do f
+        mass_f = masses[f]
         
-        # 定义真空能量被积函数 - 无闭包，显式参数传递
+        # 对当前夸克味执行2D积分
         contribution_f = integrate_2d(method, p_grid, t_grid, vacuum_energy_integrand;
                                     mass=mass_f, anisotropy=xi)
         
-        total_energy += contribution_f
+        return contribution_f
     end
     
     return -g_spin * N_c * total_energy
@@ -205,7 +207,7 @@ end
 """
     calculate_omega_thermal(masses, mu, T, Phi1, Phi2, xi, p_grid, t_grid, method=GaussLegendreIntegration())
 
-基于omega公式实现热力学贡献计算。
+基于omega公式实现热力学贡献计算，使用discrete_sum接口处理夸克味求和。
 
 物理公式:
 Ω_th = -T * g_spin * N_c * Σ_f ∫_0^Λf dp ∫_{-1}^1 dt (p^2/(2π^2)) [ln ℱ_f(E_f, μ_f; Φ, Φ̄) + ln ℱ_f(E_f, -μ_f; Φ̄, Φ)]
@@ -214,27 +216,28 @@ end
 - E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2) (各向异性能量)
 - ℱ_f(E, μ; Φ, Φ̄) = 1 + 3Φ*exp(-β(E-μ)) + 3Φ̄*exp(-2β(E-μ)) + exp(-3β(E-μ))
 - g_spin = 2, N_c = 3
+- Σ_f 表示对夸克味的离散求和，使用discrete_sum接口实现
 """
 function calculate_omega_thermal(masses::AbstractVector{T}, mu::AbstractVector{T}, temp::T,
                                 Phi1::T, Phi2::T, xi::T,
                                 p_grid::MomentumGrid, t_grid::AngleGrid,
                                 method=GaussLegendreIntegration()) where T<:Real
     
-    total_contribution = zero(T)
     g_spin = 2
     N_c = 3
     
-    # 按照omega公式: Σ_f ∫∫ 被积函数_f(p,t)
-    @inbounds for (f, mass_f) in enumerate(masses)
+    # 使用discrete_sum接口处理夸克味求和: Σ_f ∫∫ 被积函数_f(p,t)
+    total_contribution = discrete_sum(1:length(masses)) do f
+        mass_f = masses[f]
         mu_f = mu[f]
         
-        # 执行2D积分 - 无闭包，显式参数传递
+        # 对当前夸克味执行2D积分
         contribution_f = integrate_2d(method, p_grid, t_grid, thermal_integrand;
                                     mass=mass_f, chemical_potential=mu_f,
                                     temperature=temp, polyakov1=Phi1, polyakov2=Phi2,
                                     anisotropy=xi)
         
-        total_contribution += contribution_f
+        return contribution_f
     end
     
     return -temp * g_spin * N_c * total_contribution
