@@ -315,8 +315,8 @@ end
 
 function calculate_core_modern(x, mu, T, p_grid, t_grid, xi)
     """使用现代积分接口计算梯度"""
-    f = x -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
-    return AutomaticDifferentiation.compute_gradient(f, x, p_grid, t_grid, xi)
+    # 直接传入原始热力学势函数和参数，符合 compute_gradient 的签名
+    return AutomaticDifferentiation.compute_gradient(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
 end
 
 @inline function calculate_rho_modern(x, mu, T, p_grid, t_grid, xi)
@@ -473,8 +473,8 @@ end
 
 function calculate_core(x, mu, T, nodes_1, nodes_2, xi)
     """计算梯度用于方程求解"""
-    f = x -> pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
-    return AutomaticDifferentiation.compute_gradient(f, x, nodes_1, nodes_2, xi)
+    # 直接传入原始热力学势函数和参数，符合 compute_gradient 的签名
+    return AutomaticDifferentiation.compute_gradient(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
 end
 
 @inline function calculate_rho(x, mu, T, nodes_1, nodes_2, xi)
