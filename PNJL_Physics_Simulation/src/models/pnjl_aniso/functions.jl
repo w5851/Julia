@@ -1,8 +1,8 @@
 """
-PNJL 各向异性模型函数 - 基于Omega公式的积分接口实现
+PNJL 各向异性模型函数 - 现代接口版本（仅保留最新实现）
 
 此模块严格按照omega公式文档实现各向异性PNJL模型函数，
-使用统一的积分接口，消除闭包实现方式。
+使用统一的积分接口和求和接口，完全消除闭包实现方式。
 
 物理公式依据:
 - 总热力学势: Ω_total = Ω_chiral + Ω_thermal + Ω_U
@@ -13,9 +13,9 @@ PNJL 各向异性模型函数 - 基于Omega公式的积分接口实现
 架构优化:
 1. 严格按照物理公式定义被积函数
 2. 使用IntegrationInterface统一积分计算
-3. 消除闭包，使用显式函数参数传递
-4. 保持ForwardDiff兼容性以支持自动微分
-5. 保留向后兼容接口
+3. 使用discrete_sum统一求和操作
+4. 消除闭包，使用显式函数参数传递
+5. 保持ForwardDiff兼容性以支持自动微分
 
 参考文档: src/models/pnjl_aniso/omega_formulas.md
 """
@@ -39,40 +39,6 @@ using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, AngleGrid,
 # ============================================================================
 # 核心物理函数 - 基于Omega公式的精确实现
 # ============================================================================
-
-function get_nodes_aniso(p_num::Int, t_num::Int)
-    """
-    为各向异性PNJL模型生成积分节点和权重
-    
-    参数:
-        p_num: 动量节点数
-        t_num: 角度节点数
-        
-    返回:
-        包含动量、角度和系数数组的 (nodes1, nodes2) 元组
-    """
-    # 动量节点和权重
-    nodes1, weights1 = gauleg(0.0, Lambda_f, p_num)
-    nodes2, weights2 = gauleg(0.0, 20.0, p_num)
-    
-    # 角度节点和权重 (cosθ ∈ [0,1])
-    t_nodes, t_weights = gauleg(0.0, 1.0, t_num)
-
-    # 网格 (i,j) = (p, θ)
-    p1_mesh = repeat(nodes1, 1, t_num)
-    t1_mesh = repeat(t_nodes', p_num, 1)
-    w1_mesh = weights1 * t_weights'  # 外积
-    coefficient1 = w1_mesh .* p1_mesh.^2 ./ π^2  # 球坐标系数
-
-    p2_mesh = repeat(nodes2, 1, t_num)
-    t2_mesh = t1_mesh
-    w2_mesh = weights2 * t_weights'
-    coefficient2 = w2_mesh .* p2_mesh.^2 ./ π^2
-
-    nodes1 = [p1_mesh, t1_mesh, coefficient1]
-    nodes2 = [p2_mesh, t2_mesh, coefficient2]
-    return nodes1, nodes2
-end
 
 function calculate_chiral_aniso(phi)
     """计算手征凝聚贡献 - 基于Omega公式"""
@@ -137,25 +103,58 @@ end
     return F
 end
 
-@inline function calculate_log_term_aniso(E, mu, T, Phi1, Phi2)
-    """
-    计算完整的对数项，包含粒子和反粒子贡献
+# ============================================================================
+# 现代积分接口实现 - 使用discrete_sum和IntegrationInterface
+# ============================================================================
+
+"""
+    vacuum_energy_integrand(p, t; mass, anisotropy)
+
+真空能量被积函数 - 纯函数实现，避免闭包
+基于公式: (p^2/(2π^2)) * E_f(p,t)
+"""
+@inline function vacuum_energy_integrand(p::Real, t::Real; mass::Real, anisotropy::Real)
+    # 各向异性能量: E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2)
+    E_f = sqrt(mass^2 + p^2 + anisotropy * (p*t)^2)
     
-    基于Omega公式: ln ℱ_f(E, μ) + ln ℱ_f(E, -μ)
-    """
-    # 粒子项
-    F_particle = calculate_polyakov_statistical_factor(E, mu, T, Phi1, Phi2, anti_particle=false)
+    # 动量权重: p^2/(2π^2)
+    momentum_weight = p^2 / (2.0 * π^2)
     
-    # 反粒子项  
-    F_antiparticle = calculate_polyakov_statistical_factor(E, mu, T, Phi1, Phi2, anti_particle=true)
-    
-    # 使用安全对数函数
-    return safe_log(F_particle) + safe_log(F_antiparticle)
+    return momentum_weight * E_f
 end
 
-# ============================================================================
-# 基于积分接口的Omega函数实现 - 严格按照公式
-# ============================================================================
+"""
+    thermal_integrand(p, t; mass, chemical_potential, temperature, polyakov1, polyakov2, anisotropy)
+
+热力学被积函数 - 纯函数实现，避免闭包
+基于公式: (p^2/(2π^2)) * [ln ℱ_f(E, μ) + ln ℱ_f(E, -μ)]
+"""
+@inline function thermal_integrand(p::Real, t::Real; mass::Real, chemical_potential::Real,
+                                  temperature::Real, polyakov1::Real, polyakov2::Real,
+                                  anisotropy::Real)
+    
+    # 各向异性能量: E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2)
+    E_f = sqrt(mass^2 + p^2 + anisotropy * (p*t)^2)
+    
+    # 热力学分布函数的对数项
+    beta = 1.0 / temperature
+    
+    # 粒子项: ℱ_f(E, μ; Φ, Φ̄)
+    x = beta * (E_f - chemical_potential)
+    F_particle = 1.0 + 3.0*polyakov1*exp(-x) + 3.0*polyakov2*exp(-2.0*x) + exp(-3.0*x)
+    
+    # 反粒子项: ℱ_f(E, -μ; Φ̄, Φ) - 注意Φ和Φ̄的交换
+    x_anti = beta * (E_f + chemical_potential)
+    F_antiparticle = 1.0 + 3.0*polyakov2*exp(-x_anti) + 3.0*polyakov1*exp(-2.0*x_anti) + exp(-3.0*x_anti)
+    
+    # 对数项: ln ℱ_f(E, μ) + ln ℱ_f(E, -μ)
+    log_term = safe_log(F_particle) + safe_log(F_antiparticle)
+    
+    # 动量权重: p^2/(2π^2)
+    momentum_weight = p^2 / (2.0 * π^2)
+    
+    return momentum_weight * log_term
+end
 
 """
     calculate_omega_vacuum(masses, xi, p_grid, t_grid, method=GaussLegendreIntegration())
@@ -187,19 +186,6 @@ function calculate_omega_vacuum(masses, xi, p_grid::MomentumGrid, t_grid::AngleG
     end
     
     return -g_spin * N_c * total_energy
-end
-
-"""
-真空能量被积函数 - 避免闭包，使用显式参数
-"""
-@inline function vacuum_energy_integrand(p::Real, t::Real; mass::Real, anisotropy::Real)
-    # 各向异性能量: E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2)
-    E_f = sqrt(mass^2 + p^2 + anisotropy * (p*t)^2)
-    
-    # 动量权重: p^2/(2π^2)
-    momentum_weight = p^2 / (2.0 * π^2)
-    
-    return momentum_weight * E_f
 end
 
 """
@@ -238,60 +224,6 @@ function calculate_omega_thermal(masses, mu, temp, Phi1, Phi2, xi,
     end
     
     return -temp * g_spin * N_c * total_contribution
-end
-
-"""
-热力学被积函数 - 避免闭包，使用显式参数
-"""
-@inline function thermal_integrand(p::Real, t::Real; mass::Real, chemical_potential::Real,
-                                  temperature::Real, polyakov1::Real, polyakov2::Real,
-                                  anisotropy::Real)
-    
-    # 各向异性能量: E_f(p,t) = sqrt(m_f^2 + p^2 + ξ*(p*t)^2)
-    E_f = sqrt(mass^2 + p^2 + anisotropy * (p*t)^2)
-    
-    # 热力学分布函数的对数项
-    beta = 1.0 / temperature
-    
-    # 粒子项: ℱ_f(E, μ; Φ, Φ̄)
-    x = beta * (E_f - chemical_potential)
-    F_particle = 1.0 + 3.0*polyakov1*exp(-x) + 3.0*polyakov2*exp(-2.0*x) + exp(-3.0*x)
-    
-    # 反粒子项: ℱ_f(E, -μ; Φ̄, Φ) - 注意Φ和Φ̄的交换
-    x_anti = beta * (E_f + chemical_potential)
-    F_antiparticle = 1.0 + 3.0*polyakov2*exp(-x_anti) + 3.0*polyakov1*exp(-2.0*x_anti) + exp(-3.0*x_anti)
-    
-    # 对数项: ln ℱ_f(E, μ) + ln ℱ_f(E, -μ)
-    log_term = safe_log(F_particle) + safe_log(F_antiparticle)
-    
-    # 动量权重: p^2/(2π^2)
-    momentum_weight = p^2 / (2.0 * π^2)
-    
-    return momentum_weight * log_term
-end
-
-"""
-    calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-
-计算各向异性PNJL模型压力 - 向后兼容接口
-
-这是主要的向后兼容接口，内部使用现代化的积分实现。
-现有代码无需修改即可享受性能提升。
-
-Args:
-    phi: 手征凝聚矢量 [φ_u, φ_d, φ_s]
-    Phi1, Phi2: Polyakov环变量
-    mu: 化学势矢量 [μ_u, μ_d, μ_s]
-    T: 温度
-    nodes_1, nodes_2: 积分节点 (旧格式: [p_mesh, t_mesh, coefficient])
-    xi: 各向异性参数（默认0.0）
-
-Returns:
-    压力值
-"""
-function calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-    # 内部使用现代化的兼容实现
-    return calculate_pressure_aniso_compat(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
 end
 
 """
@@ -368,56 +300,172 @@ function create_aniso_grids(p_points::Int, t_points::Int;
 end
 
 # ============================================================================
-# 向后兼容性接口 - 简化包装器，内部使用现代接口
+# 现代接口的包装函数和求解器
 # ============================================================================
 
 """
-向后兼容的压力计算接口 - 内部使用现代化实现
-
-保持与现有代码的完全兼容性，但内部转换为现代网格格式并使用最新的实现。
-这是推荐的向后兼容方案，避免维护多套实现。
+现代接口的包装函数，使用积分网格而非旧式节点
 """
-function calculate_pressure_aniso_compat(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-    # 提取旧格式节点并转换为现代网格
-    p_grid, t_grid = convert_legacy_nodes_to_grids(nodes_1)
+@inline function pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
+    """使用现代积分接口的包装函数"""
+    phi = SVector{3}(x[1], x[2], x[3])
+    Phi1, Phi2 = x[4], x[5]
+    return calculate_pressure_aniso_modern(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi)
+end
+
+function calculate_core_modern(x, mu, T, p_grid, t_grid, xi)
+    """使用现代积分接口计算梯度"""
+    f = x -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
+    return ForwardDiff.gradient(f, x)
+end
+
+@inline function calculate_rho_modern(x, mu, T, p_grid, t_grid, xi)
+    """通过化学势导数计算密度 - 现代接口"""
+    f_mu = mu -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
+    rho = ForwardDiff.gradient(f_mu, mu)
+    return rho
+end
+
+function pressure_solve_core_modern(x, mu, T, p_grid, t_grid, xi)
+    """使用现代接口在平衡态求解压力"""
+    X0_typed = convert.(promote_type(eltype(x), typeof(T)), x)
+    res = nlsolve(x -> calculate_core_modern(x, mu, T, p_grid, t_grid, xi), X0_typed, autodiff=:forward)
+    return pressure_wrapper_modern(res.zero, mu, T, p_grid, t_grid, xi)
+end
+
+# ============================================================================
+# 组件分析函数 - 用于调试和分析
+# ============================================================================
+
+"""
+    analyze_omega_components_modern(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi=0.0)
+
+分析各个Omega组件的贡献 - 现代接口版本
+
+返回详细的组件分解，用于物理分析和调试
+"""
+function analyze_omega_components_modern(phi::AbstractVector{T}, Phi1::T, Phi2::T,
+                                        mu::AbstractVector{T}, temp::T,
+                                        p_grid::MomentumGrid, t_grid::AngleGrid,
+                                        xi::T=zero(T), method=GaussLegendreIntegration()) where T<:Real
+    
+    # 计算各个组件
+    masses = calculate_mass_vec(phi)
+    
+    Omega_chiral = calculate_chiral_aniso(phi)
+    Omega_U = calculate_U_aniso(temp, Phi1, Phi2)
+    Omega_vac = calculate_omega_vacuum(masses, xi, p_grid, t_grid, method)
+    Omega_th = calculate_omega_thermal(masses, mu, temp, Phi1, Phi2, xi, p_grid, t_grid, method)
+    
+    total_omega = Omega_chiral + Omega_th + Omega_vac + Omega_U
+    pressure = -total_omega
+    
+    return (
+        pressure = pressure,
+        Omega_chiral = Omega_chiral,
+        Omega_U = Omega_U,
+        Omega_vacuum = Omega_vac,
+        Omega_thermal = Omega_th,
+        Omega_total = total_omega,
+        masses = masses
+    )
+end
+
+# ============================================================================
+# 向后兼容接口 - 为了支持现有测试和代码
+# ============================================================================
+
+"""
+向后兼容的节点生成函数 - 旧接口支持
+"""
+function get_nodes_aniso(p_num::Int, t_num::Int)
+    """
+    为各向异性PNJL模型生成积分节点和权重
+    
+    参数:
+        p_num: 动量节点数
+        t_num: 角度节点数
+        
+    返回:
+        包含动量、角度和系数数组的 (nodes1, nodes2) 元组
+    """
+    # 动量节点和权重
+    nodes1, weights1 = gauleg(0.0, Lambda_f, p_num)
+    nodes2, weights2 = gauleg(0.0, 20.0, p_num)
+    
+    # 角度节点和权重 (cosθ ∈ [0,1])
+    t_nodes, t_weights = gauleg(0.0, 1.0, t_num)
+
+    # 网格 (i,j) = (p, θ)
+    p1_mesh = repeat(nodes1, 1, t_num)
+    t1_mesh = repeat(t_nodes', p_num, 1)
+    w1_mesh = weights1 * t_weights'  # 外积
+    coefficient1 = w1_mesh .* p1_mesh.^2 ./ π^2  # 球坐标系数
+
+    p2_mesh = repeat(nodes2, 1, t_num)
+    t2_mesh = t1_mesh
+    w2_mesh = weights2 * t_weights'
+    coefficient2 = w2_mesh .* p2_mesh.^2 ./ π^2
+
+    nodes1 = [p1_mesh, t1_mesh, coefficient1]
+    nodes2 = [p2_mesh, t2_mesh, coefficient2]
+    return nodes1, nodes2
+end
+
+"""
+向后兼容的压力计算接口
+"""
+function calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
+    """
+    计算各向异性PNJL模型压力 - 向后兼容接口，内部使用现代实现
+    
+    Args:
+        phi: 手征凝聚矢量 [φ_u, φ_d, φ_s]
+        Phi1, Phi2: Polyakov环变量
+        mu: 化学势矢量 [μ_u, μ_d, μ_s]
+        T: 温度
+        nodes_1, nodes_2: 积分节点 (旧格式: [p_mesh, t_mesh, coefficient])
+        xi: 各向异性参数（默认0.0）
+
+    Returns:
+        压力值
+    """
+    # 提取第一组节点信息并创建现代网格
+    p_nodes1, t_nodes1, coef1 = nodes_1
+    
+    # 提取网格大小信息
+    n_p = size(p_nodes1, 1)
+    n_t = size(t_nodes1, 2)
+    
+    # 创建现代网格 - 使用标准参数
+    p_grid, t_grid = create_aniso_grids(n_p, n_t)
     
     # 使用现代接口计算
     return calculate_pressure_aniso_modern(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi)
 end
 
 """
-将旧式节点格式转换为现代网格格式的工具函数
+辅助函数：计算完整的对数项，包含粒子和反粒子贡献
 """
-function convert_legacy_nodes_to_grids(nodes_1)
-    p_nodes1, t_nodes1, coefficient1 = nodes_1
+@inline function calculate_log_term_aniso(E, mu, T, Phi1, Phi2)
+    """
+    基于Omega公式: ln ℱ_f(E, μ) + ln ℱ_f(E, -μ)
+    """
+    # 粒子项
+    F_particle = calculate_polyakov_statistical_factor(E, mu, T, Phi1, Phi2, anti_particle=false)
     
-    # 提取唯一的动量和角度节点
-    n_p = size(p_nodes1, 1)
-    n_t = size(p_nodes1, 2)
+    # 反粒子项  
+    F_antiparticle = calculate_polyakov_statistical_factor(E, mu, T, Phi1, Phi2, anti_particle=true)
     
-    p_unique = p_nodes1[:, 1]  # 第一列
-    t_unique = t_nodes1[1, :]  # 第一行
-    
-    # 从coefficient反推权重
-    p_weights = [coefficient1[i, 1] * (2.0 * π^2) / p_unique[i]^2 for i in 1:n_p]
-    t_weights = [coefficient1[1, j] * (2.0 * π^2) / t_unique[j] for j in 1:n_t]
-    
-    # 创建现代网格对象
-    p_domain = (minimum(p_unique), maximum(p_unique))
-    t_domain = (minimum(t_unique), maximum(t_unique))
-    
-    p_grid = MomentumGrid(p_unique, p_weights, p_domain, p_domain[2])
-    t_grid = AngleGrid(t_unique, t_weights, t_domain)
-    
-    return p_grid, t_grid
+    # 使用安全对数函数
+    return safe_log(F_particle) + safe_log(F_antiparticle)
 end
 
-# ============================================================================
-# 包装函数和求解接口 (使用现代化实现)
-# ============================================================================
-
+"""
+向后兼容的包装函数
+"""
 @inline function pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
-    """包装函数，用于求解器 - 内部使用现代化实现"""
+    """包装函数，用于求解器 - 使用现代化实现"""
     phi = SVector{3}(x[1], x[2], x[3])
     Phi1, Phi2 = x[4], x[5]
     return calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
@@ -443,44 +491,20 @@ function pressure_solve_core(x, mu, T, nodes_1, nodes_2, xi)
     return pressure_wrapper(res.zero, mu, T, nodes_1, nodes_2, xi)
 end
 
-# ============================================================================
-# 新接口的包装函数 (推荐使用)
-# ============================================================================
-
-"""
-现代接口的包装函数，使用积分网格而非旧式节点
-"""
-@inline function pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
-    """使用现代积分接口的包装函数"""
-    phi = SVector{3}(x[1], x[2], x[3])
-    Phi1, Phi2 = x[4], x[5]
-    return calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi)
-end
-
-function calculate_core_modern(x, mu, T, p_grid, t_grid, xi)
-    """使用现代积分接口计算梯度"""
-    f = x -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
-    return ForwardDiff.gradient(f, x)
-end
-
-function pressure_solve_core_modern(x, mu, T, p_grid, t_grid, xi)
-    """使用现代接口在平衡态求解压力"""
-    X0_typed = convert.(promote_type(eltype(x), typeof(T)), x)
-    res = nlsolve(x -> calculate_core_modern(x, mu, T, p_grid, t_grid, xi), X0_typed, autodiff=:forward)
-    return pressure_wrapper_modern(res.zero, mu, T, p_grid, t_grid, xi)
-end
-
-# Export functions - 现代化接口
-export get_nodes_aniso, calculate_chiral_aniso, calculate_U_aniso, calculate_mass_vec,
-       calculate_energy_aniso, calculate_log_term_aniso, calculate_polyakov_statistical_factor,
+# Export 所有接口函数 - 现代接口优先，向后兼容接口保留
+export calculate_chiral_aniso, calculate_U_aniso, calculate_mass_vec,
+       calculate_energy_aniso, calculate_polyakov_statistical_factor, calculate_log_term_aniso,
        # 现代积分接口函数 (推荐使用)
-       calculate_omega_thermal, calculate_omega_vacuum, calculate_pressure_aniso_modern, 
-       create_aniso_grids, vacuum_energy_integrand, thermal_integrand,
-       # 向后兼容接口 (内部使用现代实现)
-       calculate_pressure_aniso, calculate_pressure_aniso_compat, convert_legacy_nodes_to_grids,
-       # 现代包装函数 (推荐使用)
-       pressure_wrapper_modern, calculate_core_modern, pressure_solve_core_modern,
-       # 兼容包装函数 (向后兼容)
+       calculate_omega_thermal, calculate_omega_vacuum, calculate_pressure_aniso_modern,
+       vacuum_energy_integrand, thermal_integrand,
+       # 网格创建工具
+       create_aniso_grids,
+       # 现代包装函数和求解器 (推荐使用)
+       pressure_wrapper_modern, calculate_core_modern, calculate_rho_modern, pressure_solve_core_modern,
+       # 分析工具
+       analyze_omega_components_modern,
+       # 向后兼容接口 (保持兼容性)
+       get_nodes_aniso, calculate_pressure_aniso,
        pressure_wrapper, calculate_core, calculate_rho, pressure_solve_core
 
 end  # module PNJLAnisoFunctions
