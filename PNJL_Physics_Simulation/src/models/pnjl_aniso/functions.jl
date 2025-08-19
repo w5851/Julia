@@ -22,7 +22,7 @@ PNJL 各向异性模型函数 - 现代接口版本（仅保留最新实现）
 module PNJLAnisoFunctions
 
 using SpecialFunctions: log, exp
-using ForwardDiff
+using ..AutomaticDifferentiation
 using NLsolve
 using StaticArrays
 using FiniteDifferences
@@ -316,13 +316,13 @@ end
 function calculate_core_modern(x, mu, T, p_grid, t_grid, xi)
     """使用现代积分接口计算梯度"""
     f = x -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
-    return ForwardDiff.gradient(f, x)
+    return AutomaticDifferentiation.compute_gradient(f, x, p_grid, t_grid, xi)
 end
 
 @inline function calculate_rho_modern(x, mu, T, p_grid, t_grid, xi)
     """通过化学势导数计算密度 - 现代接口"""
-    f_mu = mu -> pressure_wrapper_modern(x, mu, T, p_grid, t_grid, xi)
-    rho = ForwardDiff.gradient(f_mu, mu)
+    # 传入原始热力学势函数和变量，符合 AutomaticDifferentiation 的签名
+    rho = AutomaticDifferentiation.compute_chemical_potential_derivatives(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
     return rho
 end
 
@@ -474,13 +474,13 @@ end
 function calculate_core(x, mu, T, nodes_1, nodes_2, xi)
     """计算梯度用于方程求解"""
     f = x -> pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
-    return ForwardDiff.gradient(f, x)
+    return AutomaticDifferentiation.compute_gradient(f, x, nodes_1, nodes_2, xi)
 end
 
 @inline function calculate_rho(x, mu, T, nodes_1, nodes_2, xi)
     """通过化学势导数计算密度"""
-    f_mu = mu -> pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
-    rho = ForwardDiff.gradient(f_mu, mu)
+    # 传入原始热力学势函数和变量，符合 AutomaticDifferentiation 的签名
+    rho = AutomaticDifferentiation.compute_chemical_potential_derivatives(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
     return rho
 end
 
