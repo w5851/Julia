@@ -172,18 +172,11 @@ grid = create_momentum_grid(64, 20.0)
 method = GaussLegendreIntegration()
 result = integrate(method, grid, x -> x^2 * exp(-x))
 
-# 带额外参数的用法
-result = integrate(method, grid, (x; mass=1.0, temp=0.5) -> x^2 * exp(-sqrt(x^2 + mass^2)/temp); 
-                  mass=2.0, temp=0.15)
 ```
 """
 function integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function; kwargs...)
     params = NamedTuple(kwargs)
     return _integrate_impl(method, grid, integrand, params)
-end
-
-function integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function)
-    return _integrate_impl(method, grid, integrand, NamedTuple())
 end
 
 # GaussLegendre方法的具体实现（支持额外参数）
@@ -234,20 +227,12 @@ p_grid = create_momentum_grid(64, 20.0)
 t_grid = create_angle_grid(16)
 result = integrate_2d(GaussLegendreIntegration(), p_grid, t_grid, (p, t) -> p^2 * sin(t))
 
-# 带参数的用法
-result = integrate_2d(method, p_grid, t_grid, 
-                     (p, t; mass, temp) -> p^2 * exp(-sqrt(p^2 + mass^2)/temp);
-                     mass=1.5, temp=0.2)
 ```
 """
 function integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, 
                      integrand::Function; kwargs...)
     params = NamedTuple(kwargs)
     return _integrate_2d_impl(method, grid1, grid2, integrand, params)
-end
-
-function integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, integrand::Function)
-    return _integrate_2d_impl(method, grid1, grid2, integrand, NamedTuple())
 end
 
 function _integrate_2d_impl(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, 
