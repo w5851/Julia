@@ -1,20 +1,20 @@
 """
-PNJL Anisotropic Model Functions - Refactored with Integration Interface
+PNJL 各向异性模型函数 - 使用积分接口重构
 
-This module implements the anisotropic PNJL model functions using the new
-IntegrationInterface for better code organization and maintainability.
+此模块使用新的积分接口实现各向异性PNJL模型函数，
+以获得更好的代码组织和可维护性。
 
-Key Improvements:
-1. Separation of concerns: integrand definition vs numerical integration
-2. Utilizes core integration interface (IntegrationInterface module)
-3. Maintains backward compatibility with legacy node format
-4. Follows the principle: define physics functions, pass to core integrators
+主要改进:
+1. 关注点分离：被积函数定义与数值积分分离
+2. 利用核心积分接口 (IntegrationInterface模块)
+3. 保持与旧节点格式的向后兼容性
+4. 遵循原则：定义物理函数，传递给核心积分器
 
-Architecture:
-- Core physics functions: calculate_energy_aniso, calculate_log_term_aniso
-- Integration functions: use IntegrationInterface.integrate_2d where possible
-- Legacy compatibility: *_legacy functions for existing node formats
-- Clean interface: main calculate_pressure_aniso uses new design principles
+架构:
+- 核心物理函数: calculate_energy_aniso, calculate_log_term_aniso
+- 积分函数: 尽可能使用 IntegrationInterface.integrate_2d
+- 旧版兼容性: *_legacy 函数用于现有节点格式
+- 简洁接口: 主要的 calculate_pressure_aniso 使用新设计原则
 """
 module PNJLAnisoFunctions
 
@@ -32,31 +32,31 @@ using ..PNJLAnisoConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
 using ..IntegrationInterface: GaussLegendreIntegration, ProductGrid, AngleGrid,
                              integrate_2d, MomentumGrid
 
-# All constants are now imported from respective modules
+# 所有常数现在从相应模块导入
 
 function get_nodes_aniso(p_num::Int, t_num::Int)
     """
-    Generate integration nodes and weights for anisotropic PNJL model
+    为各向异性PNJL模型生成积分节点和权重
     
-    Args:
-        p_num: Number of momentum nodes
-        t_num: Number of angular nodes
+    参数:
+        p_num: 动量节点数
+        t_num: 角度节点数
         
-    Returns:
-        Tuple of (nodes1, nodes2) containing momentum, angle and coefficient arrays
+    返回:
+        包含动量、角度和系数数组的 (nodes1, nodes2) 元组
     """
-    # Momentum nodes and weights
+    # 动量节点和权重
     nodes1, weights1 = gauleg(0.0, Lambda_f, p_num)
     nodes2, weights2 = gauleg(0.0, 20.0, p_num)
     
-    # Angular nodes and weights (cosθ ∈ [0,1])
+    # 角度节点和权重 (cosθ ∈ [0,1])
     t_nodes, t_weights = gauleg(0.0, 1.0, t_num)
 
-    # Meshgrid (i,j) = (p, θ)
+    # 网格 (i,j) = (p, θ)
     p1_mesh = repeat(nodes1, 1, t_num)
     t1_mesh = repeat(t_nodes', p_num, 1)
-    w1_mesh = weights1 * t_weights'  # Outer product
-    coefficient1 = w1_mesh .* p1_mesh.^2 ./ π^2  # Spherical coordinate coefficient
+    w1_mesh = weights1 * t_weights'  # 外积
+    coefficient1 = w1_mesh .* p1_mesh.^2 ./ π^2  # 球坐标系数
 
     p2_mesh = repeat(nodes2, 1, t_num)
     t2_mesh = t1_mesh
@@ -69,13 +69,13 @@ function get_nodes_aniso(p_num::Int, t_num::Int)
 end
 
 function calculate_chiral_aniso(phi)
-    """Calculate chiral condensate contribution"""
+    """计算手征凝聚贡献"""
     term1 = 2 * G_f * sum(phi .^ 2) - 4 * K_f * prod(phi)
     return term1
 end
 
 @inline function calculate_U_aniso(T, Phi1, Phi2)
-    """Calculate Polyakov-loop potential"""
+    """计算Polyakov环势能"""
     T_ratio = T0 / T
     Ta = a0 + a1 * T_ratio + a2 * T_ratio^2
     Tb = b3 * T_ratio^3
@@ -87,7 +87,7 @@ end
 end
 
 @inline function calculate_mass_vec(phi)
-    """Calculate effective masses for three quark flavors"""
+    """计算三种夸克味的有效质量"""
     phiu, phid, phis = phi
     return SVector{3, eltype(phi)}(
         m0_q_f - 4 * G_f * phiu + 2 * K_f * phid * phis,
@@ -97,7 +97,7 @@ end
 end
 
 @inline function calculate_energy_aniso(mass_i, p, xi, t)
-    """Calculate energy with anisotropy parameter xi"""
+    """使用各向异性参数 xi 计算能量"""
     p2 = p^2
     mass_i2 = mass_i^2
     term_xi = xi * (p*t)^2

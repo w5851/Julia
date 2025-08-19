@@ -1,8 +1,7 @@
 """
-Common thermodynamic and statistical distribution functions.
+通用热力学和统计分布函数。
 
-This module provides shared thermodynamic functions used across
-different physics models.
+此模块为不同物理模型提供共享的热力学函数。
 """
 module Thermodynamics
 
@@ -14,15 +13,15 @@ export fermion_distribution, fermion_anti_distribution,
 """
     fermion_distribution(E, μ, T)
 
-Fermi-Dirac distribution function.
+费米-狄拉克分布函数。
 
-# Arguments
-- `E`: Energy
-- `μ`: Chemical potential
-- `T`: Temperature
+# 参数
+- `E`: 能量
+- `μ`: 化学势
+- `T`: 温度
 
-# Returns
-- Fermi-Dirac distribution value
+# 返回值
+- 费米-狄拉克分布值
 """
 @inline function fermion_distribution(E, μ, T)
     return 1 / (exp((E - μ) / T) + 1)
@@ -31,7 +30,7 @@ end
 """
     fermion_anti_distribution(E, μ, T)
 
-Anti-fermion distribution function.
+反费米子分布函数。
 """
 @inline function fermion_anti_distribution(E, μ, T)
     return 1 / (exp((E + μ) / T) + 1)
@@ -40,7 +39,7 @@ end
 """
     bosonic_distribution(E, μ, T)
 
-Bose-Einstein distribution function.
+玻色-爱因斯坦分布函数。
 """
 @inline function bosonic_distribution(E, μ, T)
     return 1 / (exp((E - μ) / T) - 1)
@@ -49,7 +48,7 @@ end
 """
     calculate_log_term(E, μ, T)
 
-Calculate logarithmic terms for thermodynamic potentials.
+计算热力学势的对数项。
 """
 @inline function calculate_log_term(E, μ, T)
     x = E - μ

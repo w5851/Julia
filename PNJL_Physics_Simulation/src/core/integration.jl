@@ -1,8 +1,8 @@
 """
-Core integration utilities for physics simulations.
+物理仿真核心积分工具。
 
-This module provides common integration functions used across different
-physics models in the PNJL simulation package.
+此模块为PNJL仿真包中的不同物理模型提供
+通用积分函数。
 """
 module Integration
 
@@ -13,18 +13,18 @@ export gauleg
 """
     gauleg(a, b, n) -> (nodes, weights)
 
-Gauss-Legendre quadrature integration nodes and weights.
+高斯-勒让德求积积分节点和权重。
 
-# Arguments
-- `a::Real`: Lower integration bound
-- `b::Real`: Upper integration bound  
-- `n::Int`: Number of integration points
+# 参数
+- `a::Real`: 积分下界
+- `b::Real`: 积分上界  
+- `n::Int`: 积分点数
 
-# Returns
-- `nodes::Vector{Float64}`: Integration nodes
-- `weights::Vector{Float64}`: Integration weights
+# 返回值
+- `nodes::Vector{Float64}`: 积分节点
+- `weights::Vector{Float64}`: 积分权重
 
-# Example
+# 示例
 ```julia
 nodes, weights = gauleg(0.0, 1.0, 10)
 ```

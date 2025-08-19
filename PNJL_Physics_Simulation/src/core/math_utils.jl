@@ -1,8 +1,8 @@
 """
-Safe mathematical functions module.
+安全数学函数模块。
 
-This module provides numerically stable versions of common mathematical
-functions to avoid overflow, underflow, and domain errors.
+此模块提供常用数学函数的数值稳定版本，
+用于避免溢出、下溢和定义域错误。
 """
 module MathUtils
 
@@ -13,34 +13,34 @@ export safe_log, safe_exp, safe_sqrt, safe_division
 """
     safe_log(x; min_val=1e-16, handle_negative=:clamp)
 
-Safe logarithm function that handles negative and near-zero values.
+安全对数函数，处理负值和接近零的值。
 
-# Arguments
-- `x`: Input value
-- `min_val`: Minimum value to clamp to (default: 1e-16)
-- `handle_negative`: How to handle negative values
-  - `:clamp`: Clamp to min_val
-  - `:error`: Throw error
-  - `:nan`: Return NaN
+# 参数
+- `x`: 输入值
+- `min_val`: 要限制到的最小值 (默认: 1e-16)
+- `handle_negative`: 如何处理负值
+  - `:clamp`: 限制到 min_val
+  - `:error`: 抛出错误
+  - `:nan`: 返回 NaN
 
-# Returns
-- Safe logarithm value
+# 返回值
+- 安全的对数值
 
-# Examples
+# 示例
 ```julia
-result = safe_log(-1.0)  # Returns log(1e-16)
-result = safe_log(1e-20) # Returns log(1e-16)
-result = safe_log(2.0)   # Returns log(2.0)
+result = safe_log(-1.0)  # 返回 log(1e-16)
+result = safe_log(1e-20) # 返回 log(1e-16)
+result = safe_log(2.0)   # 返回 log(2.0)
 ```
 
-# Notes
-- Ensures numerical stability by preventing log of negative or zero values
-- Default behavior clamps values to minimum positive value
+# 注意事项
+- 通过防止负值或零值的对数来确保数值稳定性
+- 默认行为将值限制到最小正值
 """
 @inline function safe_log(x; min_val=1e-16, handle_negative=:clamp)
     if x <= 0
         if handle_negative == :error
-            error("safe_log: Input must be positive, got $x")
+            error("safe_log: 输入必须为正数, 得到 $x")
         elseif handle_negative == :nan
             return NaN
         else  # :clamp
@@ -56,19 +56,19 @@ end
 """
     safe_exp(x; max_val=700.0)
 
-Safe exponential function that prevents overflow.
+安全指数函数，防止溢出。
 
-# Arguments
-- `x`: Input value
-- `max_val`: Maximum value to prevent overflow (default: 700.0)
+# 参数
+- `x`: 输入值
+- `max_val`: 防止溢出的最大值 (默认: 700.0)
 
-# Returns
-- Safe exponential value
+# 返回值
+- 安全的指数值
 
-# Examples
+# 示例
 ```julia
-result = safe_exp(800.0)  # Returns exp(700.0)
-result = safe_exp(1.0)    # Returns exp(1.0)
+result = safe_exp(800.0)  # 返回 exp(700.0)
+result = safe_exp(1.0)    # 返回 exp(1.0)
 ```
 """
 @inline function safe_exp(x; max_val=700.0)
@@ -82,14 +82,14 @@ end
 """
     safe_sqrt(x; min_val=0.0)
 
-Safe square root function that handles negative values.
+安全平方根函数，处理负值。
 
-# Arguments
-- `x`: Input value
-- `min_val`: Minimum value to clamp to (default: 0.0)
+# 参数
+- `x`: 输入值
+- `min_val`: 要限制到的最小值 (默认: 0.0)
 
-# Returns
-- Safe square root value
+# 返回值
+- 安全的平方根值
 """
 @inline function safe_sqrt(x; min_val=0.0)
     if x < min_val
@@ -102,15 +102,15 @@ end
 """
     safe_division(numerator, denominator; epsilon=1e-16)
 
-Safe division function that prevents division by zero.
+安全除法函数，防止除零错误。
 
-# Arguments
-- `numerator`: Numerator value
-- `denominator`: Denominator value
-- `epsilon`: Small value to prevent division by zero (default: 1e-16)
+# 参数
+- `numerator`: 分子值
+- `denominator`: 分母值
+- `epsilon`: 防止除零的小值 (默认: 1e-16)
 
-# Returns
-- Safe division result
+# 返回值
+- 安全的除法结果
 """
 @inline function safe_division(numerator, denominator; epsilon=1e-16)
     if abs(denominator) < epsilon
