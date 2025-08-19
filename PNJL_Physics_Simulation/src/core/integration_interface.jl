@@ -25,7 +25,7 @@ export IntegrationMethod, IntegrationGrid,
        GaussLegendreIntegration, AdaptiveIntegration,
        MomentumGrid, AngleGrid, ProductGrid,
        integrate, integrate_2d, integrate_vectorized,
-       omega_thermal_integral, vacuum_energy_integral,
+       discrete_sum, mixed_integral_sum, angular_momentum_sum,
        create_momentum_grid, create_angle_grid, create_product_grid,
        create_angular_momentum_grid
 
@@ -150,31 +150,45 @@ end
 # ============================================================================
 
 """
-    integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function) -> Float64
+    integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function; kwargs...) -> Float64
 
 执行一维数值积分。
 
 # Arguments
 - `method::IntegrationMethod`: 积分方法
 - `grid::IntegrationGrid`: 积分网格
-- `integrand::Function`: 被积函数 f(x)
+- `integrand::Function`: 被积函数 f(x) 或 f(x; kwargs...)
+
+# Keyword Arguments
+- 任意关键字参数会传递给被积函数，支持额外参数传递
 
 # Returns
 - `Float64`: 积分结果
 
-# Example
+# Examples
 ```julia
+# 基本用法
 grid = create_momentum_grid(64, 20.0)
 method = GaussLegendreIntegration()
 result = integrate(method, grid, x -> x^2 * exp(-x))
+
+# 带额外参数的用法
+result = integrate(method, grid, (x; mass=1.0, temp=0.5) -> x^2 * exp(-sqrt(x^2 + mass^2)/temp); 
+                  mass=2.0, temp=0.15)
 ```
 """
-function integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function)
-    return _integrate_impl(method, grid, integrand)
+function integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function; kwargs...)
+    params = NamedTuple(kwargs)
+    return _integrate_impl(method, grid, integrand, params)
 end
 
-# GaussLegendre方法的具体实现
-function _integrate_impl(method::GaussLegendreIntegration, grid::Union{MomentumGrid, AngleGrid}, integrand::Function)
+function integrate(method::IntegrationMethod, grid::IntegrationGrid, integrand::Function)
+    return _integrate_impl(method, grid, integrand, NamedTuple())
+end
+
+# GaussLegendre方法的具体实现（支持额外参数）
+function _integrate_impl(method::GaussLegendreIntegration, grid::Union{MomentumGrid, AngleGrid}, 
+                        integrand::Function, params::NamedTuple)
     result = 0.0
     
     @inbounds @simd for i in eachindex(grid.nodes)
@@ -183,7 +197,8 @@ function _integrate_impl(method::GaussLegendreIntegration, grid::Union{MomentumG
         
         # 计算被积函数值，使用安全计算避免数值问题
         try
-            func_value = integrand(node)
+            # 支持带参数的被积函数调用
+            func_value = isempty(params) ? integrand(node) : integrand(node; params...)
             if isfinite(func_value)
                 result += func_value * weight
             end
@@ -197,26 +212,46 @@ function _integrate_impl(method::GaussLegendreIntegration, grid::Union{MomentumG
 end
 
 """
-    integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, integrand::Function) -> Float64
+    integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, 
+                integrand::Function; kwargs...) -> Float64
 
 执行二维数值积分。
 
 # Arguments
 - `method::IntegrationMethod`: 积分方法
 - `grid1, grid2::IntegrationGrid`: 两个维度的积分网格
-- `integrand::Function`: 被积函数 f(x, y)
+- `integrand::Function`: 被积函数 f(x, y) 或 f(x, y; kwargs...)
+
+# Keyword Arguments
+- 任意关键字参数会传递给被积函数
 
 # Returns
 - `Float64`: 二维积分结果
 
-# Example
+# Examples
 ```julia
 p_grid = create_momentum_grid(64, 20.0)
 t_grid = create_angle_grid(16)
 result = integrate_2d(GaussLegendreIntegration(), p_grid, t_grid, (p, t) -> p^2 * sin(t))
+
+# 带参数的用法
+result = integrate_2d(method, p_grid, t_grid, 
+                     (p, t; mass, temp) -> p^2 * exp(-sqrt(p^2 + mass^2)/temp);
+                     mass=1.5, temp=0.2)
 ```
 """
+function integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, 
+                     integrand::Function; kwargs...)
+    params = NamedTuple(kwargs)
+    return _integrate_2d_impl(method, grid1, grid2, integrand, params)
+end
+
 function integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, integrand::Function)
+    return _integrate_2d_impl(method, grid1, grid2, integrand, NamedTuple())
+end
+
+function _integrate_2d_impl(method::IntegrationMethod, grid1::IntegrationGrid, grid2::IntegrationGrid, 
+                           integrand::Function, params::NamedTuple)
     result = 0.0
     
     @inbounds for i in eachindex(grid1.nodes)
@@ -228,7 +263,8 @@ function integrate_2d(method::IntegrationMethod, grid1::IntegrationGrid, grid2::
             wy = grid2.weights[j]
             
             try
-                func_value = integrand(x, y)
+                # 支持带参数的被积函数调用
+                func_value = isempty(params) ? integrand(x, y) : integrand(x, y; params...)
                 if isfinite(func_value)
                     result += func_value * wx * wy
                 end
@@ -285,124 +321,136 @@ function integrate_vectorized(method::IntegrationMethod, grid::IntegrationGrid, 
 end
 
 # ============================================================================
-# 物理专用积分函数
+# 求和接口函数 (用于离散求和)
 # ============================================================================
 
 """
-    omega_thermal_integral(masses::Vector{T}, mu::Vector{T}, temperature::T, Phi1::T, Phi2::T, grid::MomentumGrid, method::IntegrationMethod) where T<:Real -> T
+    discrete_sum(summand::Function, indices::AbstractVector) -> Float64
 
-计算PNJL模型中的热力学Omega贡献积分。
+执行离散求和计算。
 
-这个函数替代了原来分散在各模型中的 `calculate_log_sum` 函数，
-提供统一的热力学积分计算接口。
+用于处理角动量量子数等离散变量的求和，与连续积分形成互补。
 
 # Arguments
-- `masses::Vector{T}`: 有效夸克质量 [m_u, m_d, m_s]
-- `mu::Vector{T}`: 化学势 [μ_u, μ_d, μ_s]
-- `temperature::T`: 温度
-- `Phi1, Phi2::T`: Polyakov loop参数
-- `grid::MomentumGrid`: 动量积分网格
-- `method::IntegrationMethod`: 积分方法
+- `summand::Function`: 求和函数 f(index)
+- `indices::AbstractVector`: 离散指标集合
 
 # Returns
-- `T`: 热力学Omega积分贡献
+- `Float64`: 求和结果
 
-# Physics
-计算公式：Ω_thermal = -T ∑ᵢ ∫ dp p² log[1 + exp(-E/T)] * Polyakov_factor
-其中 E = √(p² + mᵢ²)，Polyakov_factor包含Polyakov loop的影响。
+# Example
+```julia
+# 角动量求和: Σ_n (2n+1) * f(n) for n = 0, 1, 2, ..., n_max
+indices = 0:10
+result = discrete_sum(n -> (2*n + 1) * exp(-n), indices)
+```
 """
-function omega_thermal_integral(masses::Vector{T}, mu::Vector{T}, temperature::T,
-                               Phi1::T, Phi2::T, grid::MomentumGrid,
-                               method::IntegrationMethod=GaussLegendreIntegration()) where T<:Real
+function discrete_sum(summand::Function, indices::AbstractVector)
+    result = 0.0
     
-    total_contribution = zero(T)
-    
-    # 对每种夸克味道计算积分贡献
-    @inbounds for (i, mass_i) in enumerate(masses)
-        mu_i = mu[i]
-        
-        # 定义被积函数：包含能量、分布函数和Polyakov loop效应
-        integrand = function(p::T)
-            E = sqrt(p^2 + mass_i^2)  # 夸克能量
-            
-            # 计算包含Polyakov loop效应的对数项
-            # 这里需要根据具体的PNJL模型实现 calculate_log_term 函数
-            log_term = _calculate_polyakov_log_term(E, mu_i, temperature, Phi1, Phi2)
-            
-            # 返回 p²log_term 作为被积函数
-            return p^2 * log_term
+    @inbounds @simd for index in indices
+        try
+            value = summand(index)
+            if isfinite(value)
+                result += value
+            end
+        catch e
+            @warn "Discrete sum failed at index $index: $e"
         end
-        
-        # 执行积分
-        contribution = integrate(method, grid, integrand)
-        total_contribution += contribution
     end
     
-    # 返回热力学贡献，包含温度因子和几何因子
-    return total_contribution * (-temperature) / (3.0 * π^2)
+    return result
 end
 
 """
-    vacuum_energy_integral(masses::Vector{T}, grid::MomentumGrid, method::IntegrationMethod) where T<:Real -> T
+    mixed_integral_sum(method::IntegrationMethod, grid::IntegrationGrid, 
+                      indices::AbstractVector, integrand_sum::Function) -> Float64
 
-计算真空能量积分贡献。
+执行混合积分-求和计算。
 
-替代原来的 `calculate_energy_sum` 函数，提供统一的真空能量计算。
+用于处理既有连续积分变量又有离散求和变量的情况，
+如旋转模型中的 ∫ dp Σ_n f(p,n)。
 
 # Arguments
-- `masses::Vector{T}`: 有效夸克质量
-- `grid::MomentumGrid`: 动量积分网格
 - `method::IntegrationMethod`: 积分方法
+- `grid::IntegrationGrid`: 连续变量的积分网格
+- `indices::AbstractVector`: 离散求和变量的指标
+- `integrand_sum::Function`: 被积函数 f(continuous_var, discrete_index)
 
 # Returns
-- `T`: 真空能量积分结果
+- `Float64`: 混合积分-求和结果
 
-# Physics
-计算公式：E_vacuum = ∑ᵢ ∫ dp p² √(p² + mᵢ²)
+# Example
+```julia
+# 计算 ∫₀^∞ dp Σ_{n=0}^{n_max} p² f(p,n)
+p_grid = create_momentum_grid(64, 20.0)
+n_indices = 0:10
+result = mixed_integral_sum(GaussLegendreIntegration(), p_grid, n_indices,
+                          (p, n) -> p^2 * exp(-sqrt(p^2 + n^2)))
+```
 """
-function vacuum_energy_integral(masses::Vector{T}, grid::MomentumGrid,
-                               method::IntegrationMethod=GaussLegendreIntegration()) where T<:Real
+function mixed_integral_sum(method::IntegrationMethod, grid::IntegrationGrid,
+                           indices::AbstractVector, integrand_sum::Function)
+    # 对离散变量求和，每一项是关于连续变量的积分
+    total_result = 0.0
     
-    total_energy = zero(T)
-    
-    @inbounds for mass_i in masses
-        # 定义被积函数：p² * E(p)
-        integrand = function(p::T)
-            E = sqrt(p^2 + mass_i^2)
-            return p^2 * E
-        end
+    @inbounds for index in indices
+        # 为当前离散指标定义被积函数
+        current_integrand = x -> integrand_sum(x, index)
         
-        # 执行积分
-        energy_contribution = integrate(method, grid, integrand)
-        total_energy += energy_contribution
+        # 执行关于连续变量的积分
+        integral_result = integrate(method, grid, current_integrand)
+        total_result += integral_result
     end
     
-    # 返回真空能量，包含几何因子
-    return total_energy / (3.0 * π^2)
+    return total_result
+end
+
+"""
+    angular_momentum_sum(method::IntegrationMethod, momentum_grid::MomentumGrid,
+                        n_max::Int, integrand::Function) -> Float64
+
+专用于角动量量子化系统的积分-求和计算。
+
+这是旋转PNJL模型的专用函数，处理形如 ∫ dp Σₙ (2n+1) f(p,n) 的计算。
+
+# Arguments
+- `method::IntegrationMethod`: 积分方法
+- `momentum_grid::MomentumGrid`: 动量积分网格
+- `n_max::Int`: 最大角动量量子数
+- `integrand::Function`: 被积函数 f(p, n)
+
+# Returns
+- `Float64`: 角动量求和结果
+
+# Physics
+在旋转系统中，角动量沿旋转轴方向量子化，每个角动量态n有统计权重(2n+1)。
+总贡献为: ∫ dp Σₙ₌₀^{n_max} (2n+1) f(p,n)
+
+# Example
+```julia
+p_grid = create_momentum_grid(64, 20.0)
+n_max = 10
+result = angular_momentum_sum(GaussLegendreIntegration(), p_grid, n_max,
+                            (p, n) -> log(1 + exp(-sqrt(p^2 + mass^2))))
+```
+"""
+function angular_momentum_sum(method::IntegrationMethod, momentum_grid::MomentumGrid,
+                             n_max::Int, integrand::Function)
+    n_indices = 0:n_max
+    
+    # 定义包含角动量统计权重的被积函数
+    weighted_integrand = function(p, n)
+        statistical_weight = 2 * n + 1  # 角动量态的统计权重
+        return statistical_weight * integrand(p, n)
+    end
+    
+    return mixed_integral_sum(method, momentum_grid, n_indices, weighted_integrand)
 end
 
 # ============================================================================
 # 辅助函数
 # ============================================================================
-
-"""
-    _calculate_polyakov_log_term(E, mu, temperature, Phi1, Phi2)
-
-计算包含Polyakov loop效应的对数项。
-
-这是内部辅助函数，实现PNJL模型中费米子分布函数与Polyakov loop的耦合。
-"""
-function _calculate_polyakov_log_term(E::T, mu::T, temperature::T, Phi1::T, Phi2::T) where T<:Real
-    # 计算费米子和反费米子的能量参数
-    x = (E - mu) / temperature
-    x_anti = (E + mu) / temperature
-    
-    # 使用安全对数函数避免数值问题
-    term1 = safe_log(1 + Phi1 * exp(-x) + Phi2 * exp(-2*x))
-    term2 = safe_log(1 + Phi2 * exp(-x_anti) + Phi1 * exp(-2*x_anti))
-    
-    return term1 + term2
-end
 
 # ============================================================================
 # 网格创建工具函数

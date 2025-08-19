@@ -1,6 +1,177 @@
 # PNJL 物理仿真项目 API 参考文档
 
-## 当前接口函数参考
+## 更新日志
+- **2025年8月19日**: 积分接口全面升级，支持参数传递和自动微分
+- **2025年8月19日**: 新增求和接口函数，支持离散求和计算
+- **2025年8月18日**: 数值稳定性修复，新增安全数学函数
+
+## 核心积分接口 (IntegrationInterface)
+
+### 基础积分函数
+
+#### `integrate(method, grid, integrand; kwargs...)`
+
+**功能**: 执行一维数值积分，支持参数传递
+
+**参数**:
+- `method::IntegrationMethod`: 积分方法（如 `GaussLegendreIntegration()`）
+- `grid::IntegrationGrid`: 积分网格（如 `MomentumGrid`, `AngleGrid`）
+- `integrand::Function`: 被积函数 `f(x)` 或 `f(x; kwargs...)`
+- `kwargs...`: 传递给被积函数的关键字参数
+
+**返回值**:
+- `Float64`: 积分结果
+
+**使用示例**:
+```julia
+# 基本用法
+grid = create_momentum_grid(64, 20.0)
+method = GaussLegendreIntegration()
+result = integrate(method, grid, x -> x^2 * exp(-x))
+
+# 带参数用法（推荐）
+result = integrate(method, grid, (x; mass, temp) -> x^2 * exp(-sqrt(x^2 + mass^2)/temp);
+                  mass=1.5, temp=0.2)
+```
+
+**自动微分兼容性**: ✅ 完全支持 ForwardDiff
+
+---
+
+#### `integrate_2d(method, grid1, grid2, integrand; kwargs...)`
+
+**功能**: 执行二维数值积分，支持参数传递
+
+**参数**:
+- `method::IntegrationMethod`: 积分方法
+- `grid1, grid2::IntegrationGrid`: 两个维度的积分网格
+- `integrand::Function`: 被积函数 `f(x, y)` 或 `f(x, y; kwargs...)`
+- `kwargs...`: 传递给被积函数的关键字参数
+
+**返回值**:
+- `Float64`: 二维积分结果
+
+**使用示例**:
+```julia
+p_grid = create_momentum_grid(64, 20.0)
+t_grid = create_angle_grid(16)
+
+# 各向异性能量积分
+result = integrate_2d(method, p_grid, t_grid, 
+                     (p, t; mass, xi) -> p^2 * sqrt(p^2 + mass^2 + xi*(p*t)^2);
+                     mass=1.0, xi=0.5)
+```
+
+**物理应用**: 各向异性模型的核心计算接口
+
+---
+
+### 求和接口函数
+
+#### `discrete_sum(summand, indices)`
+
+**功能**: 执行离散求和计算
+
+**参数**:
+- `summand::Function`: 求和函数 `f(index)`
+- `indices::AbstractVector`: 离散指标集合
+
+**返回值**:
+- `Float64`: 求和结果
+
+**使用示例**:
+```julia
+# 角动量求和: Σₙ (2n+1) * f(n)
+indices = 0:10
+result = discrete_sum(n -> (2*n + 1) * exp(-n^2), indices)
+```
+
+---
+
+#### `mixed_integral_sum(method, grid, indices, integrand_sum)`
+
+**功能**: 执行混合积分-求和计算
+
+**参数**:
+- `method::IntegrationMethod`: 积分方法
+- `grid::IntegrationGrid`: 连续变量的积分网格
+- `indices::AbstractVector`: 离散求和变量的指标
+- `integrand_sum::Function`: 被积函数 `f(continuous_var, discrete_index)`
+
+**返回值**:
+- `Float64`: 混合积分-求和结果
+
+**物理应用**: 旋转系统中的 `∫ dp Σₙ f(p,n)` 计算
+
+---
+
+#### `angular_momentum_sum(method, momentum_grid, n_max, integrand)`
+
+**功能**: 专用于角动量量子化系统的积分-求和计算
+
+**参数**:
+- `method::IntegrationMethod`: 积分方法
+- `momentum_grid::MomentumGrid`: 动量积分网格
+- `n_max::Int`: 最大角动量量子数
+- `integrand::Function`: 被积函数 `f(p, n)`
+
+**返回值**:
+- `Float64`: 角动量求和结果（自动包含统计权重）
+
+**物理背景**: 
+在旋转系统中，计算 `∫ dp Σₙ₌₀^{n_max} (2n+1) f(p,n)`，
+其中 `(2n+1)` 是角动量态的统计权重。
+
+---
+
+### 网格创建函数
+
+#### `create_momentum_grid(n_points, cutoff)`
+
+**功能**: 创建动量积分网格
+
+**参数**:
+- `n_points::Int`: 积分点数
+- `cutoff::Float64`: 动量截断值
+
+**返回值**:
+- `MomentumGrid`: 动量积分网格
+
+---
+
+#### `create_angle_grid(n_points)`
+
+**功能**: 创建角度积分网格
+
+**参数**:
+- `n_points::Int`: 积分点数
+
+**返回值**:
+- `AngleGrid`: 角度积分网格，定义域为(-1, 1)
+
+---
+
+## 模型专用积分工具
+
+### PNJL模型 (PNJLIntegrationUtils)
+
+#### `omega_thermal_integral(masses, mu, temperature, Phi1, Phi2, grid)`
+
+**功能**: 计算PNJL模型的热力学Omega积分贡献
+
+**物理公式**: `Ω_thermal = -T ∑ᵢ ∫ dp p² log[ℱ(E)] * Polyakov_factor`
+
+### PNJL各向异性模型 (PNJLAnisoIntegrationUtils)
+
+#### `omega_thermal_integral_aniso(masses, mu, T, Phi1, Phi2, p_grid, t_grid, xi)`
+
+**功能**: 计算各向异性PNJL模型的热力学积分
+
+**物理公式**: 包含各向异性能量 `E(p,t) = √(p² + m² + ξ(pt)²)`
+
+---
+
+## 当前接口函数参考（保持兼容性）
 
 ### 核心计算函数
 
