@@ -25,14 +25,16 @@ include("models/rotation/functions.jl")
 
 # 高层接口 - 在模型之后包含
 include("core/model_configuration.jl")
-# include("core/unified_physics_interface.jl")  # 暂时注释掉避免依赖问题
+include("core/unified_physics_interface.jl")  # 统一物理接口
+include("core/unified_physics_public_interface.jl")  # 新的通用公共接口
 
-# 暂时导出所有内容进行测试
+# 导出核心功能和接口
 export PhysicalConstants, Integration, IntegrationInterface, ModelConfiguration, 
        FunctionRegistry, Thermodynamics, MathUtils,
        GasLiquidConstants, GasLiquidFunctions,
        PNJLConstants, PNJLFunctions, 
        PNJLAnisoConstants, PNJLAnisoFunctions,
-       RotationConstants, RotationFunctions
+       RotationConstants, RotationFunctions,
+       UnifiedPhysicsInterface, UnifiedPhysicsPublicInterface
 
 end  # module PNJLPhysicsSimulation

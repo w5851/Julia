@@ -8,12 +8,13 @@
 
 ```
 agent/
-├── prompt.md          # 🎯 主开发提示词 - 核心开发指导原则
-├── requirements.md    # 📋 需求文档 - 当前任务和优先级  
-├── architecture.md    # 🏗️ 架构设计 - 模块化设计规范
-├── api_reference.md   # 📚 API文档 - 所有接口函数参考
-├── changelog.md       # 📰 变更日志 - 详细变更记录
-└── quick_reference.md # ⚡ 快速参考 - 开发检查清单
+├── prompt.md                        # 🎯 主开发提示词 - 核心开发指导原则
+├── requirements.md                  # 📋 需求文档 - 当前任务和优先级  
+├── architecture.md                  # 🏗️ 架构设计 - 模块化设计规范
+├── api_reference.md                 # 📚 API文档 - 所有接口函数参考
+├── changelog.md                     # 📰 变更日志 - 详细变更记录
+├── quick_reference.md              # ⚡ 快速参考 - 开发检查清单
+└── public_interface_design_spec.md # 🎨 公共接口设计规范 - 用户实现规范模板
 ```
 
 ## 🔄 标准开发工作流
@@ -161,12 +162,31 @@ result = function_name(args...)
 4. 更新相应的代理文档
 5. 使用清晰的提交信息格式：`[类型] 简短描述`
 
+## 🎨 公共接口设计
+
+### 通用接口开发流程
+1. **📝 规范定义** - 在 `public_interface_design_spec.md` 中填写详细设计规范
+2. **🏗️ 架构设计** - 按照模板要求指定架构和伪代码
+3. **⚙️ 参数设计** - 定义输入输出参数和类型约束
+4. **🛠️ 工具需求** - 明确依赖的第三方库和工具
+
+### 四大核心接口
+- **自动微分接口** - 梯度计算和参数优化
+- **方程求解接口** - 非线性方程组求解
+- **物理评估接口** - 热力学量计算和性质评估
+- **相图扫描接口** - 相变分析和状态空间探索
+
+详细规范请填写 `public_interface_design_spec.md` 模板文件。
+
+---
+
 ## 📞 支持和反馈
 
 - 技术问题：查阅 `api_reference.md`
 - 架构疑问：参考 `architecture.md`  
 - 任务规划：更新 `requirements.md`
 - 变更追踪：查看 `changelog.md`
+- 接口设计：完善 `public_interface_design_spec.md`
 
 ---
 
