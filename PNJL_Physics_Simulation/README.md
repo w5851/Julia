@@ -82,6 +82,65 @@ mu = [320.0/PhysicalConstants.hc, 320.0/PhysicalConstants.hc, 320.0/PhysicalCons
 pressure = pressure_solve_core(x, mu, T, nodes)
 ```
 
+## AI-Assisted Development
+
+This project uses structured AI assistance for development. Different AI platforms read different configuration files:
+
+- **GitHub Copilot**: `.github/copilot-instructions.md`
+- **Cursor**: `.cursorrules` 
+- **Windsurf**: `.windsurfrules`
+- **Claude/General LLM**: `CLAUDE.md`
+- **Comprehensive Guide**: `agent/prompt.md`
+
+### For AI Development Agents
+1. **Start here**: Read `agent/requirements.md` for current tasks and status
+2. **Architecture**: Understand design patterns in `agent/architecture.md`
+3. **APIs**: Check interface contracts in `agent/api_reference.md`
+4. **Workflow**: Follow development process in `agent/prompt.md`
+
+## Installation and Usage
+
+### Prerequisites
+- Julia 1.6+
+- VS Code (recommended) with Julia extension
+
+### Quick Start
+```bash
+# Navigate to project directory
+cd "d:\Desktop\Julia\PNJL_Physics_Simulation"
+
+# Activate project environment and install dependencies
+julia --project=. -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
+
+# Start Julia with project environment
+julia --project=.
+```
+
+### Basic Usage
+```julia
+# Load the package
+using PNJLPhysicsSimulation
+
+# Verify successful loading
+println("Package loaded successfully!")
+
+# Access physical constants
+println("π = ", PhysicalConstants.π)
+println("ℏc = ", PhysicalConstants.hc, " MeV⋅fm")
+
+# View available modules
+println("Available modules: ", names(PNJLPhysicsSimulation))
+```
+
+### Command Line Testing
+```bash
+# Test package loading
+julia --project=. -e 'using PNJLPhysicsSimulation; println("Package loaded successfully!")'
+
+# Test physical constants access
+julia --project=. -e 'using PNJLPhysicsSimulation; println("π = ", PhysicalConstants.π)'
+```
+
 ## Dependencies
 
 - Julia 1.6+
@@ -92,13 +151,6 @@ pressure = pressure_solve_core(x, mu, T, nodes)
 - BenchmarkTools.jl: Performance benchmarking
 - StaticArrays.jl: Fixed-size arrays
 - SpecialFunctions.jl: Mathematical special functions
-
-## Installation
-
-```julia
-using Pkg
-Pkg.develop(path="path/to/PNJL_Physics_Simulation")
-```
 
 ## Development Status
 

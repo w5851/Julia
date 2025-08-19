@@ -15,7 +15,9 @@ println("Loading PNJL Aniso model from: $project_root")
 
 # Load core modules
 include(joinpath(project_root, "src", "core", "constants.jl"))
+include(joinpath(project_root, "src", "core", "math_utils.jl"))
 include(joinpath(project_root, "src", "core", "integration.jl"))
+include(joinpath(project_root, "src", "core", "integration_interface.jl"))
 include(joinpath(project_root, "src", "core", "thermodynamics.jl"))
 
 # Load PNJL Aniso model
@@ -24,8 +26,11 @@ include(joinpath(project_root, "src", "models", "pnjl_aniso", "functions.jl"))
 
 # Import modules
 using .PhysicalConstants
+using .MathUtils
 using .Integration
+using .IntegrationInterface
 using .PNJLAnisoConstants
+using .PNJLAnisoFunctions
 
 @testset "PNJL Anisotropic Model Tests" begin
     
@@ -39,7 +44,7 @@ using .PNJLAnisoConstants
     end
     
     @testset "Integration Nodes" begin
-        nodes_1, nodes_2 = get_nodes(8, 4)  # Small size for testing
+        nodes_1, nodes_2 = get_nodes_aniso(8, 4)  # Small size for testing
         
         @test length(nodes_1) == 3  # [p_mesh, t_mesh, coefficient]
         @test length(nodes_2) == 3
@@ -65,12 +70,12 @@ using .PNJLAnisoConstants
         t = 0.5   # cosθ
         
         # Test without anisotropy (xi=0)
-        E0 = calculate_energy(mass, p, 0.0, t)
+        E0 = calculate_energy_aniso(mass, p, 0.0, t)
         expected_E0 = sqrt(p^2 + mass^2)
         @test abs(E0 - expected_E0) < 1e-10
         
         # Test with anisotropy
-        E_xi = calculate_energy(mass, p, xi, t)
+        E_xi = calculate_energy_aniso(mass, p, xi, t)
         expected_E_xi = sqrt(p^2 + mass^2 + xi * (p*t)^2)
         @test abs(E_xi - expected_E_xi) < 1e-10
         
@@ -95,7 +100,7 @@ using .PNJLAnisoConstants
     
     @testset "Chiral Condensate" begin
         phi = [-0.1, -0.1, -1.7]
-        chi = calculate_chiral(phi)
+        chi = calculate_chiral_aniso(phi)
         
         @test isa(chi, Real)
         # For negative phi values, chiral term should be positive
@@ -108,7 +113,7 @@ using .PNJLAnisoConstants
         T = 150 / PNJLAnisoConstants.hc
         Phi1, Phi2 = 0.5, 0.5
         
-        U = calculate_U(T, Phi1, Phi2)
+        U = calculate_U_aniso(T, Phi1, Phi2)
         @test isa(U, Real)
         @test isfinite(U)
         
@@ -124,10 +129,10 @@ using .PNJLAnisoConstants
         xi = 0.4
         
         # Generate small nodes for fast testing
-        nodes_1, nodes_2 = get_nodes(4, 2)
+        nodes_1, nodes_2 = get_nodes_aniso(4, 2)
         
         # Test pressure calculation
-        pressure = calculate_pressure(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
+        pressure = calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
         @test isa(pressure, Real)
         @test isfinite(pressure)
         
@@ -149,7 +154,7 @@ using .PNJLAnisoConstants
         x = [phi..., Phi1, Phi2]
         
         # Generate small nodes for fast testing
-        nodes_1, nodes_2 = get_nodes(4, 2)
+        nodes_1, nodes_2 = get_nodes_aniso(4, 2)
         
         # Test gradient calculation
         grad = calculate_core(x, mu, T, nodes_1, nodes_2, xi)
@@ -169,7 +174,7 @@ using .PNJLAnisoConstants
         x = [phi..., Phi1, Phi2]
         
         # Generate small nodes for fast testing
-        nodes_1, nodes_2 = get_nodes(4, 2)
+        nodes_1, nodes_2 = get_nodes_aniso(4, 2)
         
         # Test density calculation
         rho = calculate_rho(x, mu, T, nodes_1, nodes_2, xi)

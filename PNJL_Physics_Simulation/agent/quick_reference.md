@@ -1,5 +1,35 @@
 # 快速开发参考
 
+## 🚀 包使用快速指南
+
+### 激活项目环境
+```bash
+cd "d:\Desktop\Julia\PNJL_Physics_Simulation"
+julia --project=. -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
+```
+
+### 基本使用
+```julia
+julia --project=.
+using PNJLPhysicsSimulation
+
+# 访问物理常数
+PhysicalConstants.π        # π值
+PhysicalConstants.hc       # ℏc = 197.33 MeV⋅fm
+
+# 可用模块
+# [:FunctionRegistry, :GasLiquidConstants, :GasLiquidFunctions, 
+#  :Integration, :IntegrationInterface, :MathUtils, :ModelConfiguration, 
+#  :PNJLAnisoConstants, :PNJLAnisoFunctions, :PNJLConstants, :PNJLFunctions, 
+#  :PhysicalConstants, :RotationConstants, :RotationFunctions, :Thermodynamics]
+```
+
+### 快速测试
+```bash
+# 测试包加载
+julia --project=. -e 'using PNJLPhysicsSimulation; println("Package loaded successfully!")'
+```
+
 ## 每次开发前的检查清单 ✓
 
 1. **📖 读取需求** - 查看 `agent/requirements.md` 当前待处理任务

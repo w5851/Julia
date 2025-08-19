@@ -1,0 +1,64 @@
+{
+    "folders": [
+        {
+            "name": "PNJL Physics Simulation",
+            "path": "."
+        }
+    ],
+    "settings": {
+        "julia.environmentPath": ".",
+        "julia.enableTelemetry": false,
+        "files.associations": {
+            "*.jl": "julia"
+        },
+        "editor.rulers": [92],
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "search.exclude": {
+            "**/.git": true,
+            "**/Manifest.toml": true,
+            "**/output/**": true
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "julialang.language-julia",
+            "ms-toolsai.jupyter",
+            "GitHub.copilot",
+            "GitHub.copilot-chat"
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Julia: Run All Tests",
+                "type": "shell",
+                "command": "julia",
+                "args": ["test/run_all_tests.jl"],
+                "group": "test",
+                "presentation": {
+                    "echo": true,
+                    "reveal": "always",
+                    "focus": false,
+                    "panel": "shared"
+                },
+                "problemMatcher": []
+            },
+            {
+                "label": "Julia: Quick Integration Test",
+                "type": "shell", 
+                "command": "julia",
+                "args": ["--project=.", "-e", "include(\"test/test_integration_interface.jl\")"],
+                "group": "test"
+            },
+            {
+                "label": "Julia: Setup Dependencies",
+                "type": "shell",
+                "command": "julia",
+                "args": ["scripts/setup.jl"],
+                "group": "build"
+            }
+        ]
+    }
+}

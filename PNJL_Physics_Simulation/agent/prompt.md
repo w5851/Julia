@@ -4,6 +4,7 @@
 
 本项目是一个基于 Julia 的物理仿真系统，专注于 PNJL (Polyakov Nambu Jona-Lasinio) 模型和旋转物理现象的计算。项目包含气液相变、手征对称性破缺、Polyakov Loop 势能计算等复杂物理过程的数值模拟。
 项目文件夹名:PNJL_Physics_Simulation
+项目注释使用中文
 
 ## 开发工作流程
 
@@ -162,6 +163,131 @@ end
 - [ ] 更新文档
 - [ ] 性能测试
 - [ ] 更新需求状态
+
+## 常用测试命令
+
+### 积分接口测试
+```bash
+# 运行积分接口完整测试套件（36个测试）
+julia --project=. test/test_integration_interface.jl
+
+# 运行所有测试
+julia --project=. test/run_all_tests.jl
+
+# 运行核心功能测试
+julia --project=. test/test_core_issues.jl
+```
+
+### 模块测试
+```bash
+# 测试PNJL模型
+julia --project=. test/test_pnjl.jl
+
+# 测试PNJL各向异性模型  
+julia --project=. test/test_pnjl_aniso.jl
+
+# 测试旋转模型
+julia --project=. test/test_rotation.jl
+```
+
+## 正确使用 PNJLPhysicsSimulation 包的方法
+
+### 1. 环境准备和激活
+```bash
+# 进入项目目录
+cd "d:\Desktop\Julia\PNJL_Physics_Simulation"
+
+# 激活项目环境并安装依赖包
+julia --project=. -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
+```
+
+### 2. 基本使用方法
+```julia
+# 方法1：作为开发包使用（推荐）
+julia --project=.
+
+# 在Julia REPL中
+using PNJLPhysicsSimulation
+
+# 检查包是否正确加载
+println("Package loaded successfully!")
+
+# 查看可用的模块
+println(names(PNJLPhysicsSimulation))
+# 输出：[:FunctionRegistry, :GasLiquidConstants, :GasLiquidFunctions, 
+#        :Integration, :IntegrationInterface, :MathUtils, :ModelConfiguration, 
+#        :PNJLAnisoConstants, :PNJLAnisoFunctions, :PNJLConstants, :PNJLFunctions, 
+#        :PhysicalConstants, :RotationConstants, :RotationFunctions, :Thermodynamics]
+```
+
+### 3. 访问物理常数
+```julia
+using PNJLPhysicsSimulation
+
+# 访问物理常数
+π_value = PhysicalConstants.π              # π = 3.141592653589793
+hc_value = PhysicalConstants.hc            # ℏc = 197.33 MeV⋅fm
+```
+
+### 4. 使用具体模块功能
+```julia
+using PNJLPhysicsSimulation
+
+# 使用Gas-Liquid模型
+# 通过GasLiquidConstants访问常数
+# 通过GasLiquidFunctions访问函数
+
+# 使用PNJL模型  
+# 通过PNJLConstants访问常数
+# 通过PNJLFunctions访问函数
+
+# 使用PNJL各向异性模型
+# 通过PNJLAnisoConstants访问常数  
+# 通过PNJLAnisoFunctions访问函数
+
+# 使用旋转模型
+# 通过RotationConstants访问常数
+# 通过RotationFunctions访问函数
+
+# 使用积分功能
+# 通过Integration访问数值积分函数
+
+# 使用热力学功能
+# 通过Thermodynamics访问热力学计算函数
+```
+
+### 5. 命令行快速测试
+```bash
+# 测试包加载
+julia --project=. -e 'using PNJLPhysicsSimulation; println("Package loaded successfully!")'
+
+# 测试物理常数
+julia --project=. -e 'using PNJLPhysicsSimulation; println("π = ", PhysicalConstants.π); println("ℏc = ", PhysicalConstants.hc, " MeV⋅fm")'
+
+# 查看导出的模块
+julia --project=. -e 'using PNJLPhysicsSimulation; println("Available exports:"); println(names(PNJLPhysicsSimulation))'
+```
+
+### 6. 重要注意事项
+- **必须在项目目录下使用** `--project=.` 参数激活项目环境
+- **包名为** `PNJLPhysicsSimulation`（注意大小写）
+- **所有功能都通过子模块访问**，如 `PhysicalConstants.π`、`Integration`、`PNJLConstants` 等
+- **项目已配置为开发包**，修改源码后无需重新安装，直接重新加载即可
+
+### 7. 开发工作流程
+```julia
+# 1. 激活环境
+julia --project=.
+
+# 2. 加载包
+using PNJLPhysicsSimulation
+
+# 3. 进行开发和测试
+# 修改源码后，使用以下命令重新加载：
+using Pkg; Pkg.activate("."); 
+```
+
+这是经过实际测试验证的正确使用方法，确保每次都能成功加载和使用包。
 
 ---
 
