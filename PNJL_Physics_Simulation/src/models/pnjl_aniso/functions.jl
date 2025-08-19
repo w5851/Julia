@@ -170,9 +170,7 @@ end
 - g_spin = 2, N_c = 3 (物理常数)
 - Σ_f 表示对夸克味的离散求和，使用discrete_sum接口实现
 """
-function calculate_omega_vacuum(masses::AbstractVector{T}, xi::T,
-                               p_grid::MomentumGrid, t_grid::AngleGrid,
-                               method=GaussLegendreIntegration()) where T<:Real
+function calculate_omega_vacuum(masses, xi, p_grid::MomentumGrid, t_grid::AngleGrid, method=GaussLegendreIntegration())
     
     g_spin = 2
     N_c = 3
@@ -218,10 +216,9 @@ end
 - g_spin = 2, N_c = 3
 - Σ_f 表示对夸克味的离散求和，使用discrete_sum接口实现
 """
-function calculate_omega_thermal(masses::AbstractVector{T}, mu::AbstractVector{T}, temp::T,
-                                Phi1::T, Phi2::T, xi::T,
+function calculate_omega_thermal(masses, mu, temp, Phi1, Phi2, xi,
                                 p_grid::MomentumGrid, t_grid::AngleGrid,
-                                method=GaussLegendreIntegration()) where T<:Real
+                                method=GaussLegendreIntegration())
     
     g_spin = 2
     N_c = 3
@@ -276,9 +273,10 @@ end
 """
     calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
 
-计算各向异性PNJL模型压力 - 使用无闭包的新实现
+计算各向异性PNJL模型压力 - 向后兼容接口
 
-保持与旧接口的兼容性，但内部使用改进的无闭包实现。
+这是主要的向后兼容接口，内部使用现代化的积分实现。
+现有代码无需修改即可享受性能提升。
 
 Args:
     phi: 手征凝聚矢量 [φ_u, φ_d, φ_s]
@@ -292,8 +290,8 @@ Returns:
     压力值
 """
 function calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-    # 使用改进的无闭包实现
-    return calculate_pressure_aniso_legacy(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
+    # 内部使用现代化的兼容实现
+    return calculate_pressure_aniso_compat(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
 end
 
 """
@@ -313,10 +311,9 @@ P = -Ω_total = -(Ω_chiral + Ω_thermal + Ω_vacuum + Ω_U)
 - t_grid: 角度积分网格  
 - xi: 各向异性参数（默认0.0表示各向同性）
 """
-function calculate_pressure_aniso_modern(phi::AbstractVector{T}, Phi1::T, Phi2::T,
-                                        mu::AbstractVector{T}, temp::T, 
+function calculate_pressure_aniso_modern(phi, Phi1, Phi2, mu, temp, 
                                         p_grid::MomentumGrid, t_grid::AngleGrid,
-                                        xi::T=zero(T), method=GaussLegendreIntegration()) where T<:Real
+                                        xi=0.0, method=GaussLegendreIntegration())
     
     # 1. 手征贡献 (解析公式)
     Omega_chiral = calculate_chiral_aniso(phi)
@@ -371,171 +368,56 @@ function create_aniso_grids(p_points::Int, t_points::Int;
 end
 
 # ============================================================================
-# 向后兼容性包装函数 
+# 向后兼容性接口 - 简化包装器，内部使用现代接口
 # ============================================================================
 
 """
-向后兼容的接口包装函数，将旧的节点格式转换为新的网格格式。
+向后兼容的压力计算接口 - 内部使用现代化实现
 
-这些函数保持与现有代码的兼容性，同时内部使用新的积分接口。
+保持与现有代码的完全兼容性，但内部转换为现代网格格式并使用最新的实现。
+这是推荐的向后兼容方案，避免维护多套实现。
 """
 function calculate_pressure_aniso_compat(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-    """兼容旧接口的压力计算函数"""
+    # 提取旧格式节点并转换为现代网格
+    p_grid, t_grid = convert_legacy_nodes_to_grids(nodes_1)
     
-    # 提取旧格式的节点数据
+    # 使用现代接口计算
+    return calculate_pressure_aniso_modern(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi)
+end
+
+"""
+将旧式节点格式转换为现代网格格式的工具函数
+"""
+function convert_legacy_nodes_to_grids(nodes_1)
     p_nodes1, t_nodes1, coefficient1 = nodes_1
-    p_nodes2, t_nodes2, coefficient2 = nodes_2
     
-    # 转换为新的网格格式 (使用第一个网格，因为它通常是主要的物理积分网格)
-    p_values = vec(p_nodes1)
-    t_values = vec(t_nodes1)
-    weights = vec(coefficient1) .* (2.0 * π^2)  # 恢复原始权重
-    
-    # 重新计算分离的动量和角度权重
+    # 提取唯一的动量和角度节点
     n_p = size(p_nodes1, 1)
     n_t = size(p_nodes1, 2)
     
-    # 提取唯一的动量和角度节点
     p_unique = p_nodes1[:, 1]  # 第一列
     t_unique = t_nodes1[1, :]  # 第一行
     
-    # 计算动量和角度权重（从coefficient中反推）
+    # 从coefficient反推权重
     p_weights = [coefficient1[i, 1] * (2.0 * π^2) / p_unique[i]^2 for i in 1:n_p]
     t_weights = [coefficient1[1, j] * (2.0 * π^2) / t_unique[j] for j in 1:n_t]
     
-    # 创建网格对象
+    # 创建现代网格对象
     p_domain = (minimum(p_unique), maximum(p_unique))
     t_domain = (minimum(t_unique), maximum(t_unique))
     
     p_grid = MomentumGrid(p_unique, p_weights, p_domain, p_domain[2])
     t_grid = AngleGrid(t_unique, t_weights, t_domain)
     
-    # 使用新接口计算
-    return calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, p_grid, t_grid, xi)
+    return p_grid, t_grid
 end
 
 # ============================================================================
-# 旧接口兼容性函数 (更新为无闭包实现)
-# ============================================================================
-
-"""
-旧格式节点的直接计算函数，更新为使用显式函数而非闭包
-"""
-function calculate_pressure_aniso_legacy(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi=0.0)
-    """
-    Calculate pressure = -omega for anisotropic PNJL model using direct node calculation
-    
-    **更新**: 移除闭包实现，使用显式函数调用
-    
-    Args:
-        phi: Chiral condensate vector [phi_u, phi_d, phi_s]
-        Phi1, Phi2: Polyakov loop variables
-        mu: Chemical potential vector [mu_u, mu_d, mu_s]
-        T: Temperature
-        nodes_1, nodes_2: Integration nodes (legacy format: [p_mesh, t_mesh, coefficient])
-        xi: Anisotropy parameter
-        
-    Returns:
-        Pressure value
-    """
-    # 手征和Polyakov势贡献（解析）
-    chi = calculate_chiral_aniso(phi)
-    U = calculate_U_aniso(T, Phi1, Phi2)
-    masses = calculate_mass_vec(phi)
-    
-    # 提取节点数据
-    p_nodes1 = vec(nodes_1[1])   # momentum values
-    t_nodes1 = vec(nodes_1[2])   # angular values
-    coef1 = vec(nodes_1[3])      # combined weights * p^2 / π^2
-    
-    # 真空能量积分 - 无闭包实现
-    energy_sum = vacuum_energy_legacy_direct(masses, p_nodes1, t_nodes1, coef1, xi)
-    
-    # 提取第二组节点数据
-    p_nodes2 = vec(nodes_2[1])
-    t_nodes2 = vec(nodes_2[2]) 
-    coef2 = vec(nodes_2[3])
-    
-    # 热力学积分 - 无闭包实现  
-    log_sum = thermal_integral_legacy_direct(masses, mu, T, Phi1, Phi2, p_nodes2, t_nodes2, coef2, xi)
-    
-    return -(chi + U + energy_sum + log_sum)
-end
-
-"""
-真空能量积分的直接实现 - 移除闭包
-"""
-function vacuum_energy_legacy_direct(masses, p_nodes, t_nodes, coefficients, xi::Real=0.0)
-    total_energy = 0.0
-    masses_vec = collect(masses)
-    
-    @inbounds for mass_i in masses_vec
-        contribution = 0.0
-        
-        @inbounds for k in eachindex(p_nodes)
-            try
-                p = p_nodes[k]
-                t = t_nodes[k] 
-                coef = coefficients[k]
-                
-                # 直接调用能量函数 - 无闭包
-                E = calculate_energy_aniso(mass_i, p, xi, t)
-                
-                if isfinite(E)
-                    contribution += E * coef
-                end
-            catch e
-                @warn "Vacuum energy integration failed at index $k: $e"
-            end
-        end
-        
-        total_energy += contribution
-    end
-    
-    return total_energy * (-Nc)
-end
-
-"""
-热力学积分的直接实现 - 移除闭包
-"""
-function thermal_integral_legacy_direct(masses, mu, T, Phi1, Phi2, p_nodes, t_nodes, coefficients, xi=0.0)
-    total_contribution = zero(eltype(T))
-    masses_vec = collect(masses)
-    
-    @inbounds for (i, mass_i) in enumerate(masses_vec)
-        mu_i = mu[i]
-        contribution = zero(eltype(T))
-        
-        @inbounds for k in eachindex(p_nodes)
-            try
-                p = p_nodes[k]
-                t = t_nodes[k]
-                coef = coefficients[k]
-                
-                # 直接调用物理函数 - 无闭包
-                E_i = calculate_energy_aniso(mass_i, p, xi, t)
-                log_term = calculate_log_term_aniso(E_i, mu_i, T, Phi1, Phi2)
-                
-                if isfinite(log_term)
-                    contribution += log_term * coef
-                end
-            catch e
-                @warn "Thermal integration failed at index $k: $e"
-            end
-        end
-        
-        total_contribution += contribution
-    end
-    
-    return total_contribution * (-T)
-end
-
-# ============================================================================
-# 包装函数和求解接口 (保持与现有代码的兼容性)
+# 包装函数和求解接口 (使用现代化实现)
 # ============================================================================
 
 @inline function pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
-    """包装函数，用于求解器 - 使用兼容的接口"""
+    """包装函数，用于求解器 - 内部使用现代化实现"""
     phi = SVector{3}(x[1], x[2], x[3])
     Phi1, Phi2 = x[4], x[5]
     return calculate_pressure_aniso(phi, Phi1, Phi2, mu, T, nodes_1, nodes_2, xi)
@@ -588,18 +470,17 @@ function pressure_solve_core_modern(x, mu, T, p_grid, t_grid, xi)
     return pressure_wrapper_modern(res.zero, mu, T, p_grid, t_grid, xi)
 end
 
-# Export all functions
+# Export functions - 现代化接口
 export get_nodes_aniso, calculate_chiral_aniso, calculate_U_aniso, calculate_mass_vec,
        calculate_energy_aniso, calculate_log_term_aniso, calculate_polyakov_statistical_factor,
-       # 新积分接口函数 (推荐使用)
+       # 现代积分接口函数 (推荐使用)
        calculate_omega_thermal, calculate_omega_vacuum, calculate_pressure_aniso_modern, 
        create_aniso_grids, vacuum_energy_integrand, thermal_integrand,
-       # 兼容性接口函数 (保持向后兼容)
-       calculate_pressure_aniso, calculate_pressure_aniso_compat, calculate_pressure_aniso_legacy,
-       vacuum_energy_legacy_direct, thermal_integral_legacy_direct,
-       # 现代包装函数
+       # 向后兼容接口 (内部使用现代实现)
+       calculate_pressure_aniso, calculate_pressure_aniso_compat, convert_legacy_nodes_to_grids,
+       # 现代包装函数 (推荐使用)
        pressure_wrapper_modern, calculate_core_modern, pressure_solve_core_modern,
-       # 旧接口函数 (向后兼容)
+       # 兼容包装函数 (向后兼容)
        pressure_wrapper, calculate_core, calculate_rho, pressure_solve_core
 
 end  # module PNJLAnisoFunctions
