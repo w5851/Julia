@@ -9,7 +9,7 @@ println("Testing module loading...")
 @testset "Module Loading Tests" begin
     @testset "Core Modules" begin
         @test_nowarn include(joinpath(@__DIR__, "..", "src", "core", "constants.jl"))
-        @test_nowarn include(joinpath(@__DIR__, "..", "src", "core", "integration.jl"))
+    @test_nowarn include(joinpath(@__DIR__, "..", "src", "core", "integration_interface.jl"))
         @test_nowarn include(joinpath(@__DIR__, "..", "src", "core", "thermodynamics.jl"))
     end
     

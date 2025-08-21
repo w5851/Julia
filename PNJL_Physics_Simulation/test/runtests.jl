@@ -37,18 +37,18 @@ catch e
     error("Cannot proceed without basic constants")
 end
 
-# Test 2: Can we load integration?
-println("\nTest 2: Loading Integration...")
+# Test 2: Can we load integration interface?
+println("\nTest 2: Loading IntegrationInterface...")
 try
     using FastGaussQuadrature  # This might fail if not installed
-    include(integration_file)
-    using .Integration
-    nodes, weights = Integration.gauleg(0.0, 1.0, 5)
-    println("✓ Integration: Generated $(length(nodes)) nodes")
+    include(joinpath(project_root, "src", "core", "integration_interface.jl"))
+    using .IntegrationInterface
+    nodes, weights = IntegrationInterface.gauleg(0.0, 1.0, 5)
+    println("✓ IntegrationInterface: Generated $(length(nodes)) nodes")
     @assert length(nodes) == 5
     @assert length(weights) == 5
 catch e
-    println("⚠ Integration test skipped (missing FastGaussQuadrature?): $e")
+    println("⚠ IntegrationInterface test skipped (missing FastGaussQuadrature?): $e")
 end
 
 # Test 3: Basic Gas-Liquid constants

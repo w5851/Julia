@@ -1,3 +1,35 @@
+# 合并的重复段落（已集中在本文件）
+
+为避免多处文档重复、保持维护一致性，项目中常见的流程与规范已合并到本 `agent/README.md`：
+- 开发工作流程（首读顺序）
+   1. `agent/requirements.md` - 当前任务与优先级
+   2. `agent/architecture.md` - 架构与模块划分
+   3. `agent/api_reference.md` - 公共接口说明
+   4. `agent/quick_reference.md` - 快速命令与常用检查
+
+- 代码设计原则（摘要）
+   - 高内聚、低耦合、单一职责
+   - 明确接口并隐藏实现细节
+   - 使用依赖注入，避免硬编码
+   - 函数需有完整 docstring、边界条件和单元/边界测试
+
+- 接口与文档规范（摘要）
+   - 每个公共函数必须包含 docstring（参数、返回值、示例、注意事项）
+   - 接口文档中注明兼容性与性能约束
+
+- 常用测试与运行命令（摘要）
+   - 运行单个测试：
+      julia --project=. test/test_core_issues.jl
+   - 运行所有测试：
+      julia --project=. test/run_all_tests.jl
+   - 包环境初始化：
+      julia --project=. -e 'using Pkg; Pkg.activate("."); Pkg.instantiate()'
+
+- 文档维护规则
+   - 每次变更代码后，更新 `agent/requirements.md` 与 `agent/api_reference.md` 中对应条目
+   - 文档中若出现重复说明，应合并到本 README 并在原处保留一条短链引用
+
+（注：已在 `agent/` 下主文档顶部插入指向本文件的阅读提示，后续请优先维护本 README）
 # PNJL 物理仿真项目 AI 开发代理系统
 
 ## 🤖 代理系统简介

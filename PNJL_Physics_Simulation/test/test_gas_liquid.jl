@@ -16,7 +16,7 @@ println("Loading Gas-Liquid model from: $project_root")
 
 # Load core modules
 include(joinpath(project_root, "src", "core", "constants.jl"))
-include(joinpath(project_root, "src", "core", "integration.jl"))
+include(joinpath(project_root, "src", "core", "integration_interface.jl"))
 include(joinpath(project_root, "src", "core", "thermodynamics.jl"))
 
 # Load Gas-Liquid model
@@ -25,7 +25,7 @@ include(joinpath(project_root, "src", "models", "gas_liquid", "functions.jl"))
 
 # Import modules
 using .PhysicalConstants
-using .Integration
+using .IntegrationInterface
 using .GasLiquidConstants
 using .GasLiquidFunctions
 

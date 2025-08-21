@@ -1,4 +1,5 @@
 # PNJL 物理仿真项目开发提示词
+> 注：建议先阅读 `agent/README.md` 获取索引与推荐阅读顺序。
 项目文件夹名:PNJL_Physics_Simulation
 项目注释与git提交均使用中文，如果发现英文注释，应修改为中文(专有名词可以使用英文)
 如果需要用户提供关键信息，如函数的具体形式等，应当让用户通过交互提供信息
@@ -12,21 +13,9 @@ core文件夹下只存放公共内容，与具体模型相关的代码应当存�
 本项目是一个基于 Julia 的物理仿真系统，专注于 PNJL (Polyakov Nambu Jona-Lasinio) 模型和旋转物理现象的计算。项目包含气液相变、手征对称性破缺、Polyakov Loop 势能计算等复杂物理过程的数值模拟。
 
 
-## 开发工作流程
+## 开发工作流程（简要）
 
-### 1. 代码更新前的必读文档
-每次开始编码前，必须按顺序阅读以下文档：
-- `agent/requirements.md` - 当前需求和待实现功能
-- `agent/architecture.md` - 项目架构和设计原则
-- `agent/api_reference.md` - 所有接口函数文档
-- `USAGE_GUIDE.md` - 项目使用指南
-
-### 2. 代码更新后的文档维护
-每次代码更新后，必须：
-- 更新 `agent/requirements.md` 中对应的需求状态
-- 如有新增接口函数，更新 `agent/api_reference.md`
-- 如有架构变更，更新 `agent/architecture.md`
-- 记录变更到 `agent/changelog.md`
+详细的开发工作流程、更新前/后的文档维护步骤与检查清单已合并到 `agent/README.md`，请先阅读本 README 获取完整步骤与维护规则。
 
 ## 代码设计原则
 

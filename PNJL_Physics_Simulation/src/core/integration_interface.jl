@@ -18,8 +18,19 @@
 module IntegrationInterface
 
 using ..MathUtils: safe_log, safe_exp
-using ..Integration: gauleg
+using FastGaussQuadrature
 using StaticArrays
+
+# ---------------------------------------------
+# gauss-legendre helper (moved from integration.jl)
+# 提供 gauleg(a, b, n) -> (nodes, weights)
+# ---------------------------------------------
+function gauleg(a, b, n)
+    t_nodes, t_weights = gausslegendre(n)
+    nodes   = @. (b - a)/2 * t_nodes + (a + b)/2
+    weights = @. (b - a)/2 * t_weights
+    return nodes, weights
+end
 
 export IntegrationMethod, IntegrationGrid,
        GaussLegendreIntegration, AdaptiveIntegration,

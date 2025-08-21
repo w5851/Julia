@@ -33,7 +33,7 @@ test_point = [1.0, 2.0]
 expected_gradient = [6.0, 14.0]
 
 # 使用自动微分计算梯度
-computed_gradient = AutomaticDifferentiation.compute_gradient(test_function, test_point)
+computed_gradient = AutodiffInterface.compute_gradient(test_function, test_point)
 
 println("测试点: $test_point")
 println("期望梯度: $expected_gradient")
@@ -52,7 +52,7 @@ println("-" ^ 30)
 #     [∂²f/∂x₂∂x₁, ∂²f/∂x₂²] = [2, 6]
 expected_hessian = [2.0 2.0; 2.0 6.0]
 
-computed_hessian = AutomaticDifferentiation.compute_hessian(test_function, test_point)
+computed_hessian = AutodiffInterface.compute_hessian(test_function, test_point)
 
 println("期望Hessian:")
 display(expected_hessian)
@@ -69,7 +69,7 @@ println("-" ^ 30)
 
 # 在最小值点 x = [0, 0]，梯度应该为零
 equilibrium_point = [0.0, 0.0]
-equilibrium_result = AutomaticDifferentiation.check_equilibrium_conditions(
+equilibrium_result = AutodiffInterface.check_equilibrium_conditions(
     test_function, equilibrium_point, tolerance=1e-8
 )
 
@@ -87,7 +87,7 @@ println("\n测试4: 非平衡点检查")
 println("-" ^ 30)
 
 non_equilibrium_point = [1.0, 1.0]
-non_equilibrium_result = AutomaticDifferentiation.check_equilibrium_conditions(
+non_equilibrium_result = AutodiffInterface.check_equilibrium_conditions(
     test_function, non_equilibrium_point, tolerance=1e-8
 )
 
@@ -105,7 +105,7 @@ println("\n测试5: 带附加信息的梯度计算")
 println("-" ^ 30)
 
 variable_names = ["x₁", "x₂"]
-gradient_info = AutomaticDifferentiation.compute_gradient(
+gradient_info = AutodiffInterface.compute_gradient(
     test_function, test_point, 
     return_info=true, variable_names=variable_names
 )
@@ -137,7 +137,7 @@ T_test = 0.15
 mu_test = 0.3
 
 # 计算对φ的偏导数  
-physics_gradient = AutomaticDifferentiation.compute_gradient(
+physics_gradient = AutodiffInterface.compute_gradient(
     physics_function, phi_test, T_test, mu_test
 )
 
@@ -158,7 +158,7 @@ println("-" ^ 30)
 
 # 对于上面的物理函数，∂Ω/∂T = φ
 phi_fixed = [0.5]
-dOmega_dT = AutomaticDifferentiation.compute_temperature_derivative(
+dOmega_dT = AutodiffInterface.compute_temperature_derivative(
     physics_function, phi_fixed, T_test, mu_test
 )
 

@@ -15,7 +15,7 @@ println("Loading Rotation model from: $project_root")
 
 # Load core modules
 include(joinpath(project_root, "src", "core", "constants.jl"))
-include(joinpath(project_root, "src", "core", "integration.jl"))
+include(joinpath(project_root, "src", "core", "integration_interface.jl"))
 include(joinpath(project_root, "src", "core", "thermodynamics.jl"))
 
 # Load Rotation model
@@ -24,7 +24,7 @@ include(joinpath(project_root, "src", "models", "rotation", "functions.jl"))
 
 # Import modules
 using .PhysicalConstants
-using .Integration
+using .IntegrationInterface
 using .RotationConstants
 
 @testset "Rotation Model Tests" begin

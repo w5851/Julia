@@ -22,13 +22,13 @@ PNJL 各向异性模型函数 - 现代接口版本（仅保留最新实现）
 module PNJLAnisoFunctions
 
 using SpecialFunctions: log, exp
-using ..AutomaticDifferentiation
+using ..AutodiffInterface
 using NLsolve
 using StaticArrays
 using FiniteDifferences
 using FastGaussQuadrature
 using ..MathUtils: safe_log
-using ..Integration: gauleg
+using ..IntegrationInterface: gauleg
 using ..PhysicalConstants: hc, Nc
 using ..PNJLAnisoConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,
                            a0, a1, a2, b3, b4
@@ -316,13 +316,13 @@ end
 function calculate_core_modern(x, mu, T, p_grid, t_grid, xi)
     """使用现代积分接口计算梯度"""
     # 直接传入原始热力学势函数和参数，符合 compute_gradient 的签名
-    return AutomaticDifferentiation.compute_gradient(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
+    return AutodiffInterface.compute_gradient(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
 end
 
 @inline function calculate_rho_modern(x, mu, T, p_grid, t_grid, xi)
     """通过化学势导数计算密度 - 现代接口"""
     # 传入原始热力学势函数和变量，符合 AutomaticDifferentiation 的签名
-    rho = AutomaticDifferentiation.compute_chemical_potential_derivatives(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
+    rho = AutodiffInterface.compute_chemical_potential_derivatives(pressure_wrapper_modern, x, mu, T, p_grid, t_grid, xi)
     return rho
 end
 
@@ -474,13 +474,13 @@ end
 function calculate_core(x, mu, T, nodes_1, nodes_2, xi)
     """计算梯度用于方程求解"""
     # 直接传入原始热力学势函数和参数，符合 compute_gradient 的签名
-    return AutomaticDifferentiation.compute_gradient(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
+    return AutodiffInterface.compute_gradient(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
 end
 
 @inline function calculate_rho(x, mu, T, nodes_1, nodes_2, xi)
     """通过化学势导数计算密度"""
     # 传入原始热力学势函数和变量，符合 AutomaticDifferentiation 的签名
-    rho = AutomaticDifferentiation.compute_chemical_potential_derivatives(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
+    rho = AutodiffInterface.compute_chemical_potential_derivatives(pressure_wrapper, x, mu, T, nodes_1, nodes_2, xi)
     return rho
 end
 

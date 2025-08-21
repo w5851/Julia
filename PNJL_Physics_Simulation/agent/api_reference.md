@@ -1,9 +1,6 @@
 # PNJL 物理仿真项目 API 参考文档
 
-## 更新日志
-- **2025年8月19日**: 积分接口全面升级，支持参数传递和自动微分
-- **2025年8月19日**: 新增求和接口函数，支持离散求和计算
-- **2025年8月18日**: 数值稳定性修复，新增安全数学函数
+> 注：通用流程与维护规范已合并到 `agent/README.md`，请先阅读 README 获取首读顺序与维护规则。
 
 ## 核心积分接口 (IntegrationInterface)
 
@@ -14,13 +11,8 @@
 **功能**: 执行一维数值积分，支持参数传递
 
 **参数**:
-- `method::IntegrationMethod`: 积分方法（如 `GaussLegendreIntegration()`）
-- `grid::IntegrationGrid`: 积分网格（如 `MomentumGrid`, `AngleGrid`）
-- `integrand::Function`: 被积函数 `f(x)` 或 `f(x; kwargs...)`
-- `kwargs...`: 传递给被积函数的关键字参数
 
 **返回值**:
-- `Float64`: 积分结果
 
 **使用示例**:
 ```julia

@@ -15,8 +15,7 @@ using BenchmarkTools
 using StaticArrays
 using FiniteDifferences
 using ..MathUtils: safe_log
-using ..Integration: gauleg  # Import Integration module
-using ..IntegrationInterface: GaussLegendreIntegration, MomentumGrid, 
+using ..IntegrationInterface: gauleg, GaussLegendreIntegration, MomentumGrid, 
                              omega_thermal_integral, vacuum_energy_integral
 using ..PhysicalConstants: hc, Nc
 using ..PNJLConstants: rho0, T0, Lambda_f, G_f, K_f, m0, m0_q_f, m0_s_f,

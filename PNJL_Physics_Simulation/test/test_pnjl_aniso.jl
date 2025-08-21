@@ -16,7 +16,7 @@ println("Loading PNJL Aniso model from: $project_root")
 # Load core modules
 include(joinpath(project_root, "src", "core", "constants.jl"))
 include(joinpath(project_root, "src", "core", "math_utils.jl"))
-include(joinpath(project_root, "src", "core", "integration.jl"))
+include(joinpath(project_root, "src", "core", "integration_interface.jl"))
 include(joinpath(project_root, "src", "core", "integration_interface.jl"))
 include(joinpath(project_root, "src", "core", "thermodynamics.jl"))
 
@@ -27,7 +27,6 @@ include(joinpath(project_root, "src", "models", "pnjl_aniso", "functions.jl"))
 # Import modules
 using .PhysicalConstants
 using .MathUtils
-using .Integration
 using .IntegrationInterface
 using .PNJLAnisoConstants
 using .PNJLAnisoFunctions

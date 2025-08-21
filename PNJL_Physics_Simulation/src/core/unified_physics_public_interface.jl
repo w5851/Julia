@@ -15,17 +15,15 @@
 """
 module UnifiedPhysicsPublicInterface
 
-using NLsolve
-using DelimitedFiles
-using Dates
 using ..ModelConfiguration
 using ..UnifiedPhysicsInterface
 using ..MathUtils
-using ..AutomaticDifferentiation
+using ..AutodiffInterface
+using ..EquationSolver: solve_equilibrium_equations
 
 export 
     # Interface 1: 方程组求解接口  
-    solve_equilibrium_equations, EquilibriumSolution,
+    solve_equilibrium_equations,
     # Interface 2: 物理量计算接口
     calculate_physical_properties, PhysicalProperties,
     # Interface 3: 相图扫描接口
@@ -40,13 +38,8 @@ export
 """
 平衡态求解结果结构
 """
-struct EquilibriumSolution{T<:Real}
-    solution::Vector{T}           # 方程组的解
-    converged::Bool              # 是否收敛
-    residual_norm::T             # 残差范数
-    iterations::Int              # 迭代次数
-    solve_time::Float64          # 求解时间（秒）
-end
+# EquilibriumSolution 已被移除，替换为独立文件 `equation_solver.jl` 中的纯解向量接口
+include("solver_interface.jl")  # 现在将 solver_interface 作为求解器接口
 
 """
     solve_equilibrium_equations(equation_system, initial_guess, config::ModelConfig; options...)
@@ -81,37 +74,8 @@ else
 end
 ```
 """
-function solve_equilibrium_equations(equation_system, initial_guess::Vector{T}, config::ModelConfig;
-                                   method=:newton, ftol::Float64=1e-10, iterations::Int=1000,
-                                   show_trace::Bool=false) where T<:Real
-    start_time = time()
-    
-    try
-        # 包装方程组函数以适配nlsolve接口
-        residual_func!(F, x) = begin
-            residuals = equation_system(x, config)
-            F .= residuals
-        end
-        
-        # 调用nlsolve
-        result = nlsolve(residual_func!, initial_guess; 
-                        method=method, ftol=ftol, iterations=iterations, 
-                        show_trace=show_trace, autodiff=:forward)
-        
-        solve_time = time() - start_time
-        
-        return EquilibriumSolution(
-            result.zero,
-            converged(result),
-            result.residual_norm,
-            result.iterations,
-            solve_time
-        )
-    catch e
-        solve_time = time() - start_time
-        error("方程组求解失败: $e")
-    end
-end
+# 低层实现已移至 `equation_solver.jl`，该文件提供了返回解向量的 `solve_equilibrium_equations`。
+# 此处保留文档接口以便从热力学势直接调用（see below）。
 
 """
     solve_equilibrium_equations(thermodynamic_potential, initial_guess, config::ModelConfig; options...)
@@ -126,7 +90,8 @@ function solve_equilibrium_equations(thermodynamic_potential, initial_guess::Vec
                                    config::ModelConfig; kwargs...) where T<:Real
     # 创建方程组函数，使用新的自动微分模块
     equation_system = (x, conf) -> compute_gradient(thermodynamic_potential, x, conf)
-    
+
+    # 调用低层求解器（返回解向量或在未收敛时抛出错误）
     return solve_equilibrium_equations(equation_system, initial_guess, config; kwargs...)
 end
 
@@ -363,38 +328,39 @@ function scan_phase_diagram(thermodynamic_potential, base_config::ModelConfig;
             initial_guess = initial_guess_func(T, mu)
             
             try
-                # 求解平衡态
-                solution = solve_equilibrium_equations(
+                # 求解平衡态（返回解向量或抛出错误）
+                sol_vec = solve_equilibrium_equations(
                     thermodynamic_potential, initial_guess, current_config;
                     ftol=1e-8, show_trace=false
                 )
-                
-                # 计算物理量
-                properties = if compute_properties && solution.converged
-                    calculate_physical_properties(solution.solution, current_config, thermodynamic_potential)
+
+                converged_flag = true
+
+                # 计算物理量（仅在收敛时计算详细物理量）
+                properties = if compute_properties && converged_flag
+                    calculate_physical_properties(sol_vec, current_config, thermodynamic_potential)
                 else
-                    # 创建空的properties
                     PhysicalProperties(0.0, 0.0, 0.0, 0.0, [0.0, 0.0, 0.0], (0.0, 0.0),
                                      0.0, 0.0, Dict{String, Float64}(), T, [mu], 
                                      string(typeof(current_config)), 0.0)
                 end
-                
+
                 # 创建相图点
-                point = PhasePoint(T, mu, solution.solution, properties, solution.converged, (i, j))
+                point = PhasePoint(T, mu, sol_vec, properties, converged_flag, (i, j))
                 push!(results, point)
-                
+
             catch e
-                # 如果计算失败，创建未收敛的点
+                # 如果计算失败或未收敛，创建未收敛的点
                 empty_solution = zeros(length(initial_guess))
                 empty_properties = PhysicalProperties(0.0, 0.0, 0.0, 0.0, [0.0, 0.0, 0.0], (0.0, 0.0),
                                                     0.0, 0.0, Dict{String, Float64}(), T, [mu],
                                                     string(typeof(current_config)), 0.0)
-                
+
                 point = PhasePoint(T, mu, empty_solution, empty_properties, false, (i, j))
                 push!(results, point)
-                
+
                 if show_progress
-                    println("   ⚠️  点 (T=$(round(T,digits=3)), μ=$(round(mu,digits=3))) 计算失败: $e")
+                    println("   ⚠️  点 (T=$(round(T,digits=3)), μ=$(round(mu,digits=3))) 计算失败或未收敛: $e")
                 end
             end
             
@@ -501,7 +467,7 @@ function save_phase_diagram(phase_points::Vector{PhasePoint}, filename::String;
                 
                 if format == :dat
                     println(io, "# ", join(header_parts, "\t"))
-                    println(io, "# Generated on: ", Dates.now())
+                    # 省略生成时间以避免对 Dates 的依赖
                     println(io, "# Total points: ", n_points)
                     println(io, "# Converged points: ", count(p -> p.converged, phase_points))
                 else
@@ -509,8 +475,11 @@ function save_phase_diagram(phase_points::Vector{PhasePoint}, filename::String;
                 end
             end
             
-            # 写入数据
-            writedlm(io, data, delimiter)
+            # 写入数据（手动实现，避免对 DelimitedFiles 的依赖问题）
+            for i in 1:size(data, 1)
+                row = join([string(data[i, j]) for j in 1:size(data, 2)], string(delimiter))
+                write(io, row * "\n")
+            end
         end
         
         println("📁 相图数据已保存至: $filename")

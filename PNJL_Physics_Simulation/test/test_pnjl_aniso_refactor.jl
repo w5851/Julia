@@ -86,8 +86,8 @@ end
 println("\n5. Testing new integration interface...")
 try
     # Generate test nodes
-    p_nodes, p_weights = Integration.gauleg(0.0, 10.0, 32)
-    t_nodes, t_weights = Integration.gauleg(-1.0, 1.0, 16)
+    p_nodes, p_weights = IntegrationInterface.gauleg(0.0, 10.0, 32)
+    t_nodes, t_weights = IntegrationInterface.gauleg(-1.0, 1.0, 16)
     
     # Test parameters
     masses = [0.3, 0.3, 0.4]  # Test masses in natural units
