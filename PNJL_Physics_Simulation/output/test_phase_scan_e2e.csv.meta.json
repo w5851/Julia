@@ -1,0 +1,1 @@
+{"tool_version": "phase_scan_interface_v1", "outputs": "[:Omega, :pressure]", "created_at": "2025-08-21T20:36:10.028", "total_points": 16, "axes": "Dict{String, Any}[Dict("name" => "T", "n" => 4), Dict("name" => "mu", "n" => 4)]"}
