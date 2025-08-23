@@ -198,7 +198,7 @@ end
 end
 
 @inline function calculate_thermo(x , mu,T,nodes_1, nodes_2, xi)
-    rho = calculate_rho(x, mu, T, nodes_1, nodes_2, xi)
+    rho = sum(calculate_rho(x, mu, T, nodes_1, nodes_2, xi)) / (3.0*rho0)
 
     f_T = T -> pressure_wrapper(x, mu, T, nodes_1, nodes_2, xi)
     entropy = ForwardDiff.derivative(f_T, T)
@@ -218,181 +218,156 @@ function calculate_t_rho(x,T,rho,nodes_1, nodes_2, xi, fvec=Vector{eltype(x)}(un
     fvec[8] = sum(calculate_rho(x_phi, x_mu, T, nodes_1, nodes_2, xi)) / (3.0*rho0) - rho
     return fvec
 end
-x = [-0.1, -0.1, -1.7, 0.5, 0.5]
-mu = [320 / hc, 320 / hc, 320 / hc]
-T = 150 / hc
-nodes_1, nodes_2 = get_nodes(128, 16)
-@show res = pressure_wrapper(x, mu, T, nodes_1, nodes_2, 0.4)
-@show res_core = calculate_core(x, mu, T, nodes_1, nodes_2, 0.4)
-@show res_themo = calculate_thermo(x, mu, T, nodes_1, nodes_2, 0.4)
-fdm = central_fdm(5, 1)  # 五点中心差分，步长自动选择
-f = mu -> pressure_wrapper(x, mu, T, nodes_1, nodes_2, 0.4)
-@show j = jacobian(fdm,f,mu)
 
-function Trho(T_start,T_end)
-    nodes = get_nodes(128)
-    
-    for T in T_start:1/hc:T_end
-        x = [-1.8, -1.8, -2.1, 0.8, 0.8, 320 / hc, 320 / hc, 320 / hc]  # 添加 μ_u, μ_d, μ_s
-        for rho in 3.00:-0.01:0.10
-            res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes), x)
-            if res.f_converged
-                copyto!(x, res.zero)  # 更新 x
-            else
-                @warn "Root finding did not converge for T=$T and rho=$rho"
-            end
-        end
-    end
-    return nothing
-end
+
+
 function Trho(T_start, T_end)
-    nodes = get_nodes(128)
-    
+    # 获取节点（p_num=128, t_num=16）
+    nodes_1, nodes_2 = get_nodes(128, 16)
+
+    # 输出目录和文件
+    outdir = joinpath(@__DIR__, "..", "output")
+    mkpath(outdir)
+    outfile = joinpath(outdir, "trho_scan.csv")
+
     # 初始x值
     x_initial = [-1.8, -1.8, -2.1, 0.8, 0.8, 320 / hc, 320 / hc, 320 / hc]
-    
     # 保存每个T下rho=3.00的解
     x_rho_3 = copy(x_initial)
-    
-    for T in T_start:1/hc:T_end
-        # 使用上一个T的rho=3.00的解作为初始值
-        x = copy(x_rho_3)
-        
-        # 首先单独计算rho=3.00的情况
-        rho = 3.00
-        res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes), x)
-        if res.f_converged
-            copyto!(x, res.zero)
-            # 保存当前T下rho=3.00的解，供下一个T循环使用
-            copyto!(x_rho_3, x)
-        else
-            @warn "Root finding did not converge for T=$T and rho=$rho"
-        end
-        
-        # 然后计算剩余的rho值
-        for rho in 2.99:-0.01:0.10
-            res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes), x)
-            if res.f_converged
-                copyto!(x, res.zero)
+
+    # 打开文件并写入表头，然后逐行追加扫描得到的解
+    open(outfile, "w") do io
+    println(io, "T,rho,phi_u,phi_d,phi_s,Phi1,Phi2,mu_u,mu_d,mu_s,pressure,entropy,energy,converged")
+
+        # 主循环：按 T 扫描
+        for T in T_start:1/hc:T_end
+            # 使用上一个T的rho=3.00的解作为初始值
+            x = copy(x_rho_3)
+
+            # 首先单独计算rho=3.00的情况
+            rho = 3.00
+            converged = false
+            try
+                res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes_1, nodes_2, 0.0), x)
+                converged = res.f_converged
+                if converged
+                    copyto!(x, res.zero)
+                    # 保存当前T下rho=3.00的解，供下一个T循环使用
+                    copyto!(x_rho_3, x)
+                else
+                    @warn "Root finding did not converge for T=$T and rho=$rho"
+                end
+            catch err
+                @warn "Exception in root finding for T=$T and rho=$rho: $err"
+                converged = false
+            end
+
+            # 计算热力学量（若收敛）并写入 csv 行
+            if converged
+                x_phi = SVector{5}(x[1:5])
+                x_mu = SVector{3}(x[6:8])
+                pressure, _, entropy, energy = calculate_thermo(x_phi, x_mu, T, nodes_1, nodes_2, 0.0)
             else
-                @warn "Root finding did not converge for T=$T and rho=$rho"
+                pressure = NaN
+                entropy = NaN
+                energy = NaN
+            end
+            println(io, join([T*hc, rho, x..., pressure, entropy, energy, converged], ","))
+            flush(io)
+
+            # 然后计算剩余的rho值
+            for rho in 2.99:-0.01:0.10
+                try
+                    res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes_1, nodes_2, 0.0), x)
+                    converged = res.f_converged
+                    if converged
+                        copyto!(x, res.zero)
+                    else
+                        @warn "Root finding did not converge for T=$T and rho=$rho"
+                    end
+                catch err
+                    @warn "Exception in root finding for T=$T and rho=$rho: $err"
+                    converged = false
+                end
+
+                if converged
+                    x_phi = SVector{5}(x[1:5])
+                    x_mu = SVector{3}(x[6:8])
+                    pressure, _, entropy, energy = calculate_thermo(x_phi, x_mu, T, nodes_1, nodes_2, 0.0)
+                else
+                    pressure = NaN
+                    entropy = NaN
+                    energy = NaN
+                end
+                println(io, join([T*hc, rho, x..., pressure, entropy, energy, converged], ","))
+                flush(io)
             end
         end
     end
+
     return nothing
 end
-"""
-优化版 Trho 函数
 
-参数:
-- T_start, T_end, T_step: 温度范围和步长
-- rho_start, rho_end, rho_step: 密度范围和步长
-- save_results: 是否保存计算结果 (默认为 true)
-- result_file: 保存结果的文件名 (默认为 "trho_results.jld2")
-
-返回:
-- 如果 save_results=true, 返回 nothing 并保存结果到文件
-- 如果 save_results=false, 返回计算结果字典
-"""
-function Trho_optimized(T_start, T_end, T_step=1/hc, 
-                         rho_start=3.00, rho_end=0.10, rho_step=-0.01; 
-                         save_results=true, result_file="trho_results.jld2")
-    # 初始化节点
-    nodes = get_nodes(128)
-    
-    # 创建温度和密度序列
-    T_values = T_start:T_step:T_end
-    rho_values = rho_start:rho_step:rho_end
-    
-    # 创建结果存储结构 - 可选项
-    results = Dict{Float64, Dict{Float64, Vector{Float64}}}()
-    
-    # 滑动数组：存储上一个 T 和当前 T 的所有 rho 值对应的解
-    # prev_solutions[rho] = x 值解
-    prev_solutions = Dict{Float64, Vector{Float64}}()
-    curr_solutions = Dict{Float64, Vector{Float64}}()
-    
-    # 初始解
-    x_initial = [-1.8, -1.8, -2.1, 0.8, 0.8, 320/hc, 320/hc, 320/hc]
-    
-    # 对每个温度进行迭代
-    for (t_idx, T) in enumerate(T_values)
-        # 重置当前 T 的解存储
-        empty!(curr_solutions)
-        
-        # 计算该温度下的所有密度
-        T_results = Dict{Float64, Vector{Float64}}()
-        
-        println("Processing T = $T ($(t_idx)/$(length(T_values)))")
-        
-        # 对每个密度进行迭代
-        for rho in rho_values
-            # 1. 选择初始值：优先使用上一个温度的相同密度解
-            if haskey(prev_solutions, rho)
-                x = copy(prev_solutions[rho])
-            elseif !isempty(curr_solutions) && rho_step < 0
-                # 如果是降序密度且当前温度已有解，使用相邻更高密度的解
-                closest_rho = findmax(filter(r -> r > rho, keys(curr_solutions)))[1]
-                x = copy(curr_solutions[closest_rho])
-            elseif !isempty(curr_solutions) && rho_step > 0
-                # 如果是升序密度且当前温度已有解，使用相邻更低密度的解
-                closest_rho = findmin(filter(r -> r < rho, keys(curr_solutions)))[1]
-                x = copy(curr_solutions[closest_rho])
-            else
-                # 没有可用的解，使用默认初始值
-                x = copy(x_initial)
-            end
-            
-            # 2. 求解方程
-            res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes), x)
-            
-            # 3. 处理结果
-            if res.f_converged
-                # 保存解
-                curr_solutions[rho] = copy(res.zero)
-                
-                # 可选：保存到结果集
-                if save_results
-                    T_results[rho] = copy(res.zero)
-                end
-            else
-                @warn "Root finding did not converge for T=$T and rho=$rho"
-                # 尝试使用默认初始值重新求解
-                x = copy(x_initial)
-                res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes), x)
-                
-                if res.f_converged
-                    curr_solutions[rho] = copy(res.zero)
-                    if save_results
-                        T_results[rho] = copy(res.zero)
-                    end
-                else
-                    @warn "Second attempt failed for T=$T and rho=$rho"
-                end
-            end
-        end
-        
-        # 4. 保存当前温度的结果
-        if save_results
-            results[T] = T_results
-        end
-        
-        # 5. 滑动：将当前解移到上一个解
-        empty!(prev_solutions)
-        for (k, v) in curr_solutions
-            prev_solutions[k] = v
-        end
-        
-        
-    end
-    
-    
-end
 
 function pressure_solve_core(x, mu, T, nodes)
     X0_typed = convert.(promote_type(eltype(x), typeof(T)), x)
     res = nlsolve(x -> calculate_core(x,mu,T,nodes), X0_typed, autodiff=:forward)
     return pressure_wrapper(res.zero,mu,T,nodes)
+end
+
+
+function Tmu(;T_start, T_end, T_step, mu_start, mu_end, mu_step)
+    # 节点
+    nodes_1, nodes_2 = get_nodes(256, 16)
+
+    # 输出文件
+    outdir = joinpath(@__DIR__, "..", "output")
+    mkpath(outdir)
+    outfile = joinpath(outdir, "tmu_scan.csv")
+
+    # 初始 x（只有 5 个变量：phi_u, phi_d, phi_s, Phi1, Phi2）
+    x_initial = [-1.8, -1.8, -2.1, 0.8, 0.8]
+    x_prev = copy(x_initial)
+
+    open(outfile, "w") do io
+        println(io, "T,mu,phi_u,phi_d,phi_s,Phi1,Phi2,pressure,rho,entropy,energy,converged")
+
+        for T in T_start:T_step:T_end
+            # 对每个 T，在 mu 方向扫描
+            for mu in mu_start:mu_step:mu_end
+                x = copy(x_prev)
+                converged = false
+                pressure = NaN
+                entropy = NaN
+                energy = NaN
+                rho =NaN
+                try
+                    # mu_vec 为三夸克相同的化学势
+                    mu_vec = SVector{3}(mu, mu, mu)
+                    # 使用 calculate_core 求解 5 个未知量
+                    res = nlsolve(x -> calculate_core(x, mu_vec, T, nodes_1, nodes_2, 0.0), x; autodiff = :forward)
+                    converged = res.f_converged
+                    if converged
+                        copyto!(x, res.zero)
+                        x_prev .= x  # 用当前解作为下一点的初始值
+                        # 计算热力学量（pressure, entropy, energy）
+                        pressure, rho, entropy, energy = calculate_thermo(x, mu_vec, T, nodes_1, nodes_2, 0.0)
+                    else
+                        @warn "Root finding did not converge for T=$T and mu=$mu"
+                    end
+                catch err
+                    @warn "Exception in root finding for T=$T and mu=$mu: $err"
+                    converged = false
+                end
+
+                # 写入 csv：将 T, mu 转换回物理单位（乘 hc）以与 Trho 保持一致
+                println(io, join([T*hc, mu*hc, x..., pressure, rho,entropy, energy, converged], ","))
+                flush(io)
+            end
+        end
+    end
+
+    return nothing
 end
 
 #pressure_solve_core(x, mu, T, nodes)
@@ -423,7 +398,7 @@ end
 #res = @benchmark dP_dT4(x,mu,T,nodes) samples=100 seconds=10
 #display(res)
 
-fdm = central_fdm(5, 4)  # 五点中心差分，步长自动选择
+#fdm = central_fdm(5, 4)  # 五点中心差分，步长自动选择
 function dP_dT4_direct(x, mu, T, nodes,fdm)
     f = T -> pressure_solve_core(x, mu, T, nodes)
     return fdm(f, T)
@@ -431,3 +406,6 @@ end
 #@show dP_dT4_direct(x, mu, T, nodes,fdm)
 #res = @benchmark dP_dT4_direct(x, mu, T, nodes,fdm) samples=100 seconds=10
 #display(res)
+
+Tmu(T_start=130/hc, T_end=131/hc, T_step=1/hc, mu_start=400/hc, mu_end=0.0, mu_step=-1/hc)
+#Trho(T_start=100/hc, T_end=101/hc)

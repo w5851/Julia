@@ -326,6 +326,11 @@ end
     return rho
 end
 
+function equation_tmu!(res,x,params)
+    # 计算化学势关于温度的方程
+    res .= calculate_rho_modern(x, params.mu, params.T, params.p_grid, params.t_grid, params.xi)
+end
+
 function pressure_solve_core_modern(x, mu, T, p_grid, t_grid, xi)
     """使用现代接口在平衡态求解压力"""
     X0_typed = convert.(promote_type(eltype(x), typeof(T)), x)

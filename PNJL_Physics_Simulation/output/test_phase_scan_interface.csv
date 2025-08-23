@@ -1,0 +1,3 @@
+T,mu,x,y,Omega,solver_converged,n_iter,residual
+100.0,10.0,10.0,0.1,100.01,true,0,0.0
+200.0,10.0,20.0,0.1,400.01,true,0,0.0

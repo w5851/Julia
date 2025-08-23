@@ -232,6 +232,7 @@ function Trho(T_start,T_end)
     end
     return nothing
 end
+"""
 phi = 0.1
 Phi1 = 0.2
 Phi2 = 0.3
@@ -243,3 +244,4 @@ omega = 100/hc
 x = SVector(phi, Phi1, Phi2)
 @show calculate_core(x, mu, T, nodes1, omega)
 @show calculate_thermo(x, mu, T, nodes1, omega)
+"""
