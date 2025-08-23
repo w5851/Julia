@@ -228,7 +228,7 @@ function Trho(T_start, T_end)
     # 输出目录和文件
     outdir = joinpath(@__DIR__, "..", "output")
     mkpath(outdir)
-    outfile = joinpath(outdir, "trho_scan.csv")
+    outfile = joinpath(outdir, "trho_aniso.csv")
 
     # 初始x值
     x_initial = [-1.8, -1.8, -2.1, 0.8, 0.8, 320 / hc, 320 / hc, 320 / hc]
@@ -323,7 +323,7 @@ function Tmu(;T_start, T_end, T_step, mu_start, mu_end, mu_step)
     # 输出文件
     outdir = joinpath(@__DIR__, "..", "output")
     mkpath(outdir)
-    outfile = joinpath(outdir, "tmu_scan.csv")
+    outfile = joinpath(outdir, "tmu_aniso.csv")
 
     # 初始 x（只有 5 个变量：phi_u, phi_d, phi_s, Phi1, Phi2）
     x_initial = [-1.8, -1.8, -2.1, 0.8, 0.8]

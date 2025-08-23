@@ -180,7 +180,7 @@ end
 end
 
 @inline function calculate_thermo(x , mu,T,nodes1,omega)
-    rho = calculate_rho(x, mu, T, nodes1,omega)
+    rho = calculate_rho(x, mu, T, nodes1,omega) / rho0
 
     f_T = T -> pressure_wrapper(x, mu, T, nodes1,omega)
     entropy = ForwardDiff.derivative(f_T, T)
@@ -191,57 +191,104 @@ end
     return pressure,rho, entropy,energy
 end
 
-function calculate_t_rho(x,T,rho,nodes1,omega, fvec=Vector{eltype(x)}(undef, 8))
-    x_phi = SVector{5}(x[1:5])
-    x_mu = SVector{3}(x[6:8])
-    fvec[1:5] .= calculate_core(x_phi, x_mu, T, nodes1,omega)
-    fvec[6] = x_mu[1] - x_mu[2]  # μ_u - μ_d
-    fvec[7] = x_mu[2] - x_mu[3]  # μ_d - μ_s
-    fvec[8] = sum(calculate_rho(x_phi, x_mu, T, nodes1,omega)) / (3.0*rho0) - rho
+function calculate_t_rho(x,T,rho,nodes1,omega, fvec=Vector{eltype(x)}(undef, 4))
+    x_phi = SVector{3}(x[1:3])
+    x_mu = x[4]
+    fvec[1:3] .= calculate_core(x_phi, x_mu, T, nodes1,omega)
+    fvec[4] = calculate_rho(x_phi, x_mu, T, nodes1,omega) / rho0 - rho
     return fvec
 end
-function Trho(mu_start,mu_end)
-    nodes1, nodes2 = get_nodes(128,16)
-    omega = 100/hc
-    for mu in mu_start:1/hc:mu_end
-        x = [-1.8, -1.8, -2.1, 0.8, 0.8]  # 添加 μ_u, μ_d, μ_s
-        for T in T_start:1/hc:T_end
-            res = nlsolve(x -> calculate_core(x, mu,T, nodes1,omega), x)
-            if res.f_converged
-                copyto!(x, res.zero)  # 更新 x
-            else
-                @warn "Root finding did not converge for T=$T and rho=$rho"
-            end
-        end
-    end
-    return nothing
-end
+
 function Trho(T_start,T_end)
     nodes1, nodes2 = get_nodes(128,16)
     omega = 100/hc
-    for T in T_start:1/hc:T_end
-        x = [-1.8, -1.8, -2.1, 0.8, 0.8, 320 / hc, 320 / hc, 320 / hc]  # 添加 μ_u, μ_d, μ_s
-        for rho in 3.00:-0.01:0.10
-            res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes1,omega), x)
-            if res.f_converged
-                copyto!(x, res.zero)  # 更新 x
+
+    # 输出文件
+    outdir = joinpath(@__DIR__, "..", "output")
+    mkpath(outdir)
+    outfile = joinpath(outdir, "trho_rotation.csv")
+
+    x_initial = [-2.13,0.06,0.12, 310 / hc]
+    x_rho_3 = copy(x_initial)
+
+    open(outfile, "w") do io
+        println(io, "T,rho,phi,Phi1,Phi2,mu,pressure,entropy,energy,converged")
+
+        for T in T_start:1/hc:T_end
+            x = copy(x_rho_3)
+            rho = 3.00
+            converged = false
+            try
+                res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes1,omega), x)
+                converged = res.f_converged
+                if converged
+                    copyto!(x, res.zero)
+                    copyto!(x_rho_3, x)
+                else
+                    @warn "Root finding did not converge for T=$T and rho=$rho"
+                end
+            catch err
+                @warn "Exception in root finding for T=$T and rho=$rho: $err"
+                converged = false
+            end
+
+            if converged
+                x_phi = SVector{3}(x[1:3])
+                x_mu = x[4]
+                pressure, _, entropy, energy = calculate_thermo(x_phi, x_mu, T, nodes1,omega)
             else
-                @warn "Root finding did not converge for T=$T and rho=$rho"
+                pressure = NaN
+                entropy = NaN
+                energy = NaN
+            end
+            println(io, join([T*hc, rho, x..., pressure, entropy, energy, converged], ","))
+            flush(io)
+
+            for rho in 2.99:-0.01:0.10
+                try
+                    res = nlsolve(x -> calculate_t_rho(x, T, rho, nodes1,omega), x)
+                    converged = res.f_converged
+                    if converged
+                        copyto!(x, res.zero)
+                    else
+                        @warn "Root finding did not converge for T=$T and rho=$rho"
+                    end
+                catch err
+                    @warn "Exception in root finding for T=$T and rho=$rho: $err"
+                    converged = false
+                end
+
+                if converged
+                    x_phi = SVector{3}(x[1:3])
+                    x_mu = x[4]
+                    pressure, _, entropy, energy = calculate_thermo(x_phi, x_mu, T, nodes1,omega)
+                else
+                    pressure = NaN
+                    entropy = NaN
+                    energy = NaN
+                end
+                println(io, join([T*hc, rho, x..., pressure, entropy, energy, converged], ","))
+                flush(io)
             end
         end
     end
+
     return nothing
 end
+Trho(100/hc,101/hc)
 """
-phi = 0.1
-Phi1 = 0.2
-Phi2 = 0.3
-T=150/hc
-mu = 100/hc
+phi = -2.13
+Phi1 = 0.06
+Phi2 = 0.13
+T=100/hc
+mu = 308.3/hc
 nodes1, nodes2 = get_nodes(128, 16)
 omega = 100/hc
+omega = 0.0
 @show calculate_pressure(phi, Phi1, Phi2, mu, T, nodes1, omega)
 x = SVector(phi, Phi1, Phi2)
 @show calculate_core(x, mu, T, nodes1, omega)
 @show calculate_thermo(x, mu, T, nodes1, omega)
+x=SVector(phi, Phi1, Phi2, mu)
+@show calculate_t_rho(x, T, 4.0, nodes1, omega)
 """
