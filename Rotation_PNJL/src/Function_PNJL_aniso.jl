@@ -407,7 +407,7 @@ end
 #res = @benchmark dP_dT4_direct(x, mu, T, nodes,fdm) samples=100 seconds=10
 #display(res)
 
-Tmu(T_start=130/hc, T_end=131/hc, T_step=1/hc, mu_start=400/hc, mu_end=0.0, mu_step=-1/hc)
+#Tmu(T_start=130/hc, T_end=131/hc, T_step=1/hc, mu_start=400/hc, mu_end=0.0, mu_step=-1/hc)
 #Trho(T_start=100/hc, T_end=101/hc)
 
 # ===================== find_cep 功能实现 =====================
@@ -494,11 +494,12 @@ function has_s_shape_aniso(T_mev; min_negative_points=3, derivative_threshold=-0
     return has_s
 end
 
-function find_cep_aniso(T_min=50.0, T_max=150.0, tolerance=0.5)
+function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
     """
     找到温度临界点T_cep，该温度下rho-mu关系正好不出现"S形" (适用于aniso模型)
     
     参数:
+    - xi: 各向异性参数
     - T_min: 搜索的最低温度 (MeV)
     - T_max: 搜索的最高温度 (MeV) 
     - tolerance: 温度搜索精度 (MeV)
@@ -512,6 +513,7 @@ function find_cep_aniso(T_min=50.0, T_max=150.0, tolerance=0.5)
     
     println("=" ^ 60)
     println("开始寻找临界温度 T_cep (PNJL aniso 模型)")
+    println("各向异性参数 xi = $xi")
     println("搜索范围: [$T_min, $T_max] MeV")
     println("精度: $tolerance MeV")
     println("=" ^ 60)
@@ -636,7 +638,33 @@ function find_cep_aniso(T_min=50.0, T_max=150.0, tolerance=0.5)
     println("  区间宽度: $(T_high - T_low) MeV")
     println("=" ^ 60)
     
+    # 记录结果到CSV文件
+    if !isnan(T_cep)
+        record_cep_result(xi, T_cep)
+    end
+    
     return T_cep
+end
+
+function record_cep_result(xi, T_cep)
+    """记录CEP结果到CSV文件"""
+    # 输出文件路径
+    outdir = joinpath(@__DIR__, "..", "output")
+    mkpath(outdir)
+    outfile = joinpath(outdir, "aniso_cep.csv")
+    
+    # 检查文件是否存在，如果不存在则写入表头
+    file_exists = isfile(outfile)
+    
+    open(outfile, "a") do io
+        if !file_exists
+            println(io, "xi,T_cep")
+        end
+        println(io, "$xi,$T_cep")
+    end
+    
+    println("✓ 结果已记录到文件: $outfile")
+    println("  xi = $xi, T_cep = $T_cep MeV")
 end
 
 # 便捷的测试函数
@@ -659,3 +687,6 @@ function test_find_cep_aniso()
     
     return T_cep
 end
+
+xi = 0.0
+find_cep_aniso(xi,120.0,140.0,0.01)
