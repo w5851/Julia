@@ -412,7 +412,7 @@ end
 
 # ===================== find_cep 功能实现 =====================
 
-function generate_single_temperature_data_aniso(T_target)
+function generate_single_temperature_data_aniso(T_target, xi=0.0)
     """为单个温度生成完整的rho-mu数据 (适用于aniso模型)"""
     nodes_1, nodes_2 = get_nodes(128, 16)
     
@@ -426,7 +426,7 @@ function generate_single_temperature_data_aniso(T_target)
     for rho in [3.00; collect(2.99:-0.01:0.10)]
         converged = false
         try
-            res = nlsolve(x -> calculate_t_rho(x, T_target, rho, nodes_1, nodes_2, 0.0), x)
+            res = nlsolve(x -> calculate_t_rho(x, T_target, rho, nodes_1, nodes_2, xi), x)
             converged = res.f_converged
             if converged
                 copyto!(x, res.zero)
@@ -445,12 +445,13 @@ function generate_single_temperature_data_aniso(T_target)
     return rho_mu_pairs
 end
 
-function has_s_shape_aniso(T_mev; min_negative_points=3, derivative_threshold=-0.001)
+function has_s_shape_aniso(T_mev, xi=0.0; min_negative_points=3, derivative_threshold=-0.001)
     """
     检测给定温度下是否存在S形 (适用于aniso模型)
     
     参数:
     - T_mev: 温度 (MeV)
+    - xi: 各向异性参数
     - min_negative_points: 至少需要多少个负导数点才认为存在S形
     - derivative_threshold: 负导数阈值
     
@@ -458,7 +459,7 @@ function has_s_shape_aniso(T_mev; min_negative_points=3, derivative_threshold=-0
     """
     T_julia = T_mev / hc  # 转换为Julia内部单位
     
-    rho_mu_pairs = generate_single_temperature_data_aniso(T_julia)
+    rho_mu_pairs = generate_single_temperature_data_aniso(T_julia, xi)
     
     if length(rho_mu_pairs) < 3
         @debug "温度 $T_mev MeV 处数据点太少，无法判断S形"
@@ -526,7 +527,7 @@ function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
     
     for T_scan in scan_temps
         print("扫描 T=$T_scan MeV... ")
-        has_s = has_s_shape_aniso(T_scan)
+        has_s = has_s_shape_aniso(T_scan, xi)
         push!(s_shape_results, (T_scan, has_s))
         if !has_s
             println("无S形")
@@ -543,8 +544,8 @@ function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
         T2, has_s2 = s_shape_results[i+1]
         
         if has_s1 != has_s2  # 找到相变
-            T_low = has_s1 ? T2 : T1  # 有S形的温度作为下界
-            T_high = has_s1 ? T1 : T2  # 无S形的温度作为上界
+            T_low = has_s1 ? T1 : T2   # 有S形的温度作为下界
+            T_high = has_s1 ? T2 : T1  # 无S形的温度作为上界
             transition_found = true
             println("✓ 发现相变区间: [$T_low, $T_high] MeV")
             break
@@ -563,7 +564,7 @@ function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
             println("初始范围内都有S形，向高温扩展搜索...")
             for T_test in (T_max+scan_step):scan_step:min(max_search_range, T_max+max_search_range)
                 print("测试 T=$T_test MeV... ")
-                current_has_s = has_s_shape_aniso(T_test)
+                current_has_s = has_s_shape_aniso(T_test, xi)
                 
                 if !current_has_s
                     println("无S形")
@@ -582,7 +583,7 @@ function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
             println("初始范围内都无S形，向低温扩展搜索...")
             for T_test in (T_min-scan_step):-scan_step:max(5.0, T_min-max_search_range)
                 print("测试 T=$T_test MeV... ")
-                current_has_s = has_s_shape_aniso(T_test)
+                current_has_s = has_s_shape_aniso(T_test, xi)
                 
                 if current_has_s
                     println("有S形")
@@ -617,7 +618,7 @@ function find_cep_aniso(xi, T_min=50.0, T_max=150.0, tolerance=0.5)
         
         print("第 $iteration 次迭代: 测试 T=$T_mid MeV... ")
         
-        mid_has_s = has_s_shape_aniso(T_mid)
+        mid_has_s = has_s_shape_aniso(T_mid, xi)
         if !mid_has_s
             println("无S形")
         end
@@ -689,4 +690,6 @@ function test_find_cep_aniso()
 end
 
 xi = 0.0
+#has_s_shape_aniso(140.0, xi)
+#Trho(140.0/hc,140.0/hc)
 find_cep_aniso(xi,120.0,140.0,0.01)
