@@ -433,12 +433,13 @@ function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nod
                                                    output_file=joinpath(@__DIR__, "..", "output", "fluctuation_ratios_vs_T.csv"))
     """
     固定重子化学势μ_B，改变温度T，计算不同温度下的κ₃/κ₁和κ₄/κ₂
+    使用迭代初解策略：每个温度点使用上一个温度点的收敛解作为初始猜测值
     
     参数:
     - μ_B: 固定的重子化学势
     - T_min: 最小温度
     - T_max: 最大温度  
-    - x0: 初始猜测值 [gσ, gδ, μ_p, μ_n]
+    - x0: 初始猜测值 [gσ, gδ, μ_p, μ_n]（仅用于第一个温度点）
     - nodes: 积分节点和权重
     - couplings: 耦合常数 [fσ, fω, fρ, fδ, b, c]
     - T_step: 温度步长 (默认1/hc)
@@ -461,15 +462,180 @@ function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nod
     kappa3_over_kappa1 = zeros(n_points)
     kappa4_over_kappa2 = zeros(n_points)
     
+    # 存储每个温度点的收敛解，用于下一个点的初始猜测
+    solution_history = Vector{Vector{Float64}}(undef, n_points)
+    
     println("开始计算固定μ_B = $(μ_B*hc) MeV下，$(n_points) 个温度点的涨落比值...")
     println("温度范围: $(T_min*hc) - $(T_max*hc) MeV，步长: $(T_step*hc) MeV")
+    println("使用迭代初解策略提高收敛性...")
+    
+    # 初始化第一个点的初始猜测值
+    current_x0 = copy(x0)
     
     # 循环计算每个温度点
     for (i, T) in enumerate(T_array)
         try
-            # 计算热力学涨落
+            # 设置当前温度的参数
+            params = [T, μ_B]
+            
+            # 求解自洽方程获得收敛解
+            converged_solution = solve_fun_constraints(current_x0, nodes, couplings, params)
+            
+            # 存储收敛解
+            solution_history[i] = copy(converged_solution)
+            
+            # 使用收敛解计算热力学涨落
             kappa1, kappa2, kappa3, kappa4, _ = 
-                calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
+                calculate_thermodynamic_fluctuations(μ_B, T, converged_solution, nodes, couplings)
+            
+            # 存储结果
+            temperature_array[i] = T
+            
+            # 计算涨落比值，避免除零
+            if abs(kappa1) > 1e-12
+                kappa3_over_kappa1[i] = kappa3 / kappa1
+            else
+                kappa3_over_kappa1[i] = NaN
+            end
+            
+            if abs(kappa2) > 1e-12
+                kappa4_over_kappa2[i] = kappa4 / kappa2
+            else
+                kappa4_over_kappa2[i] = NaN
+            end
+            
+            # 更新下一个温度点的初始猜测值
+            if i < n_points
+                current_x0 = copy(converged_solution)
+                
+                # 可选：对下一个温度点的初始猜测进行微调
+                # 这里可以根据物理直觉对某些参数进行外推
+                # 例如：假设场量随温度的变化是平滑的
+                if i > 1
+                    # 使用线性外推改善初始猜测
+                    prev_solution = solution_history[i-1]
+                    current_solution = solution_history[i]
+                    extrapolated = current_solution .+ (current_solution .- prev_solution)
+                    
+                    # 混合使用外推值和当前解，避免过度外推
+                    mix_factor = 0.3  # 外推权重
+                    current_x0 = (1 - mix_factor) .* current_solution .+ mix_factor .* extrapolated
+                end
+            end
+            
+            # 进度报告
+            if i % 10 == 0 || i == n_points
+                println("已完成: $(i)/$(n_points) ($(round(i/n_points*100, digits=1))%) - T = $(T*hc) MeV")
+                println("  当前解: [gσ=$(round(converged_solution[1], digits=4)), gδ=$(round(converged_solution[2], digits=4)), μ_p=$(round(converged_solution[3]*hc, digits=2)) MeV, μ_n=$(round(converged_solution[4]*hc, digits=2)) MeV]")
+            end
+            
+        catch e
+            println("警告: 温度 T = $(T*hc) MeV 处计算失败: $e")
+            # 填入NaN值
+            temperature_array[i] = T
+            kappa3_over_kappa1[i] = NaN
+            kappa4_over_kappa2[i] = NaN
+            solution_history[i] = copy(current_x0)  # 保持当前初始猜测值不变
+        end
+    end
+    
+    # 创建结果矩阵 [温度, κ₃/κ₁, κ₄/κ₂]
+    results_matrix = hcat(temperature_array .* hc, kappa3_over_kappa1, kappa4_over_kappa2)
+    
+    # 保存结果到文件
+    if save_results
+        save_fluctuation_ratios_results(results_matrix, μ_B, output_file)
+        println("结果已保存到文件: $output_file")
+    end
+    
+    println("温度扫描计算完成!")
+    return temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix
+end
+
+function calculate_fluctuation_ratios_vs_temperature_advanced(μ_B, T_min, T_max, x0, nodes, couplings; 
+                                                            T_step=1.0/hc, save_results=false, 
+                                                            output_file=joinpath(@__DIR__, "..", "output", "fluctuation_ratios_vs_T.csv"),
+                                                            use_iterative_guess=true, extrapolation_weight=0.3,
+                                                            return_solution_history=false)
+    """
+    固定重子化学势μ_B，改变温度T，计算不同温度下的κ₃/κ₁和κ₄/κ₂
+    高级版本：提供更多控制选项
+    
+    参数:
+    - μ_B: 固定的重子化学势
+    - T_min: 最小温度
+    - T_max: 最大温度  
+    - x0: 初始猜测值 [gσ, gδ, μ_p, μ_n]
+    - nodes: 积分节点和权重
+    - couplings: 耦合常数 [fσ, fω, fρ, fδ, b, c]
+    - T_step: 温度步长 (默认1/hc)
+    - save_results: 是否保存结果到文件
+    - output_file: 输出文件名
+    - use_iterative_guess: 是否使用迭代初解策略 (默认true)
+    - extrapolation_weight: 外推权重，控制线性外推的强度 (默认0.3)
+    - return_solution_history: 是否返回每个温度点的收敛解历史 (默认false)
+    
+    返回:
+    - temperature_array: 温度数组
+    - kappa3_over_kappa1: κ₃/κ₁数组
+    - kappa4_over_kappa2: κ₄/κ₂数组
+    - results_matrix: [温度, κ₃/κ₁, κ₄/κ₂] 格式的结果矩阵
+    - solution_history: 每个温度点的收敛解历史 (仅当return_solution_history=true时返回)
+    """
+    
+    # 生成温度数组
+    T_array = T_min:T_step:T_max
+    n_points = length(T_array)
+    
+    # 预分配结果数组
+    temperature_array = zeros(n_points)
+    kappa3_over_kappa1 = zeros(n_points)
+    kappa4_over_kappa2 = zeros(n_points)
+    solution_history = Vector{Vector{Float64}}(undef, n_points)
+    
+    println("开始计算固定μ_B = $(μ_B*hc) MeV下，$(n_points) 个温度点的涨落比值...")
+    println("温度范围: $(T_min*hc) - $(T_max*hc) MeV，步长: $(T_step*hc) MeV")
+    
+    if use_iterative_guess
+        println("使用迭代初解策略，外推权重: $(extrapolation_weight)")
+    else
+        println("使用固定初解策略")
+    end
+    
+    # 初始化第一个点的初始猜测值
+    current_x0 = copy(x0)
+    
+    # 循环计算每个温度点
+    for (i, T) in enumerate(T_array)
+        try
+            if use_iterative_guess
+                # 使用迭代初解策略
+                params = [T, μ_B]
+                converged_solution = solve_fun_constraints(current_x0, nodes, couplings, params)
+                solution_history[i] = copy(converged_solution)
+                
+                # 使用收敛解计算热力学涨落
+                kappa1, kappa2, kappa3, kappa4, _ = 
+                    calculate_thermodynamic_fluctuations(μ_B, T, converged_solution, nodes, couplings)
+                
+                # 更新下一个温度点的初始猜测值
+                if i < n_points
+                    current_x0 = copy(converged_solution)
+                    
+                    # 线性外推改善初始猜测
+                    if i > 1 && extrapolation_weight > 0
+                        prev_solution = solution_history[i-1]
+                        current_solution = solution_history[i]
+                        extrapolated = current_solution .+ (current_solution .- prev_solution)
+                        current_x0 = (1 - extrapolation_weight) .* current_solution .+ extrapolation_weight .* extrapolated
+                    end
+                end
+            else
+                # 使用固定初解策略
+                kappa1, kappa2, kappa3, kappa4, _ = 
+                    calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
+                solution_history[i] = copy(x0)  # 保存初始猜测值作为"解"
+            end
             
             # 存储结果
             temperature_array[i] = T
@@ -490,6 +656,10 @@ function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nod
             # 进度报告
             if i % 10 == 0 || i == n_points
                 println("已完成: $(i)/$(n_points) ($(round(i/n_points*100, digits=1))%) - T = $(T*hc) MeV")
+                if use_iterative_guess
+                    sol = solution_history[i]
+                    println("  当前解: [gσ=$(round(sol[1], digits=4)), gδ=$(round(sol[2], digits=4)), μ_p=$(round(sol[3]*hc, digits=2)) MeV, μ_n=$(round(sol[4]*hc, digits=2)) MeV]")
+                end
             end
             
         catch e
@@ -498,6 +668,7 @@ function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nod
             temperature_array[i] = T
             kappa3_over_kappa1[i] = NaN
             kappa4_over_kappa2[i] = NaN
+            solution_history[i] = copy(current_x0)
         end
     end
     
@@ -511,7 +682,12 @@ function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nod
     end
     
     println("温度扫描计算完成!")
-    return temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix
+    
+    if return_solution_history
+        return temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix, solution_history
+    else
+        return temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix
+    end
 end
 
 function save_fluctuation_ratios_results(results_matrix, μ_B, filename)

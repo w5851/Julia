@@ -107,7 +107,7 @@ println("计算点数: $(length(μ_B_range))")
 
 results = calculate_derivatives_batch(μ_B_range, T, x0, nodes, couplings, 
                                     save_results=true, 
-                                    output_file=joinpath(@__DIR__, "..", "..", "output", "pressure_derivatives_example.csv"))
+                                    output_file=joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "pressure_derivatives_example.csv"))
 
 println("批量计算完成，结果已保存为CSV格式")
 
@@ -132,7 +132,7 @@ println("温度步长: $(T_step*hc) MeV")
 temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix = 
     calculate_fluctuation_ratios_vs_temperature(μ_B_fixed, T_min, T_max, x0, nodes, couplings,
                                                T_step=T_step, save_results=true,
-                                               output_file=joinpath(@__DIR__, "..", "..", "output", "fluctuation_ratios_vs_T_example.csv"))
+                                               output_file=joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "fluctuation_ratios_vs_T_example.csv"))
 
 # 显示部分结果
 println("\n前5个温度点的结果:")
@@ -164,8 +164,8 @@ println("5. 示例演示完成")
 println("="^50)
 
 println("输出文件:")
-println("- 压强导数批量计算: ../../output/pressure_derivatives_example.csv")
-println("- 涨落比值温度扫描: ../../output/fluctuation_ratios_vs_T_example.csv")
+println("- 压强导数批量计算: ../../output/Gas_Liquid/pressure_derivatives_example.csv")
+println("- 涨落比值温度扫描: ../../output/Gas_Liquid/fluctuation_ratios_vs_T_example.csv")
 println("\n所有输出文件均为CSV格式，便于数据分析和绘图")
 
 println("\n" * "="^60)

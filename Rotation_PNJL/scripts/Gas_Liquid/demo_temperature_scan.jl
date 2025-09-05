@@ -48,10 +48,19 @@ x0 = [gsigma, gdelta, mu_p, mu_n]
 println("\n2. 开始温度扫描计算...")
 
 # 执行温度扫描
+println("方法1: 使用迭代初解策略（默认）")
 temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix = 
     calculate_fluctuation_ratios_vs_temperature(μ_B_fixed, T_min, T_max, x0, nodes, couplings,
                                                T_step=T_step, save_results=true,
-                                               output_file=joinpath(@__DIR__, "..", "..", "output", "demo_fluctuation_ratios_vs_T.csv"))
+                                               output_file=joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "demo_fluctuation_ratios_vs_T.csv"))
+
+println("\n方法2: 使用高级版本进行对比测试")
+temperature_array_adv, kappa3_over_kappa1_adv, kappa4_over_kappa2_adv, results_matrix_adv, solution_history = 
+    calculate_fluctuation_ratios_vs_temperature_advanced(μ_B_fixed, T_min, T_max, x0, nodes, couplings,
+                                                        T_step=T_step, save_results=true,
+                                                        output_file=joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "demo_fluctuation_ratios_vs_T_advanced.csv"),
+                                                        use_iterative_guess=true, extrapolation_weight=0.2,
+                                                        return_solution_history=true)
 
 println("\n3. 结果分析:")
 println("-"^40)
@@ -98,10 +107,21 @@ println("-"^40)
 println("维度: $(size(results_matrix))")
 println("列含义: [T(MeV), κ₃/κ₁, κ₄/κ₂]")
 
-println("\n6. 输出文件:")
+println("\n6. 解的收敛性分析:")
 println("-"^40)
-output_file = joinpath(@__DIR__, "..", "..", "output", "demo_fluctuation_ratios_vs_T.csv")
-println("结果已保存到: $output_file")
+println("前3个温度点的收敛解:")
+for i in 1:min(3, length(solution_history))
+    sol = solution_history[i]
+    T_val = temperature_array[i] * hc
+    println("T = $(round(T_val, digits=1)) MeV: [gσ=$(round(sol[1], digits=4)), gδ=$(round(sol[2], digits=4)), μ_p=$(round(sol[3]*hc, digits=2)) MeV, μ_n=$(round(sol[4]*hc, digits=2)) MeV]")
+end
+
+println("\n7. 输出文件:")
+println("-"^40)
+output_file = joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "demo_fluctuation_ratios_vs_T.csv")
+output_file_adv = joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "demo_fluctuation_ratios_vs_T_advanced.csv")
+println("标准版结果: $output_file")
+println("高级版结果: $output_file_adv")
 
 println("\n" * "="^60)
 println("演示完成!")
