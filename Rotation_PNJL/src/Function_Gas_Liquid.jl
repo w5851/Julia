@@ -293,7 +293,7 @@ function calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
     return kappa1, kappa2, kappa3, kappa4, fluctuation_ratios
 end
 
-function calculate_derivatives_batch(μ_B_array, T, x0, nodes, couplings; save_results=false, output_file=joinpath(@__DIR__, "..", "output", "derivatives_output.dat"))
+function calculate_derivatives_batch(μ_B_array, T, x0, nodes, couplings; save_results=false, output_file=joinpath(@__DIR__, "..", "output", "derivatives_output.csv"))
     """
     批量计算多个化学势点的压强导数
     模拟Fortran代码中的循环计算过程
@@ -398,8 +398,8 @@ function calculate_derivatives_batch(μ_B_array, T, x0, nodes, couplings; save_r
 end
 
 function save_derivatives_results(results, filename)
-    """保存导数计算结果到文件"""
-    println("正在保存结果到文件: $filename")
+    """保存导数计算结果到CSV文件"""
+    println("正在保存结果到CSV文件: $filename")
     
     # 确保输出目录存在
     output_dir = dirname(filename)
@@ -410,74 +410,136 @@ function save_derivatives_results(results, filename)
     
     try
         open(filename, "w") do io
-            # 写入文件头
-            write(io, "# 压强导数计算结果\n")
-            write(io, "# 列: μ_B(MeV) T(MeV) P ∂P/∂μ ∂²P/∂μ² ∂³P/∂μ³ ∂⁴P/∂μ⁴ κ₁ κ₂ κ₃ κ₄ κ₂/κ₁ κ₃/κ₂ κ₄/κ₂\n")
+            # 写入CSV文件头
+            write(io, "mu_B_MeV,T_MeV,pressure,dpre_dmu1,dpre_dmu2,dpre_dmu3,dpre_dmu4,kappa1,kappa2,kappa3,kappa4,kappa2_over_kappa1,kappa3_over_kappa2,kappa4_over_kappa2\n")
             
             # 写入数据
             for i in eachindex(results.μ_B)
-                write(io, "$(results.μ_B[i]*hc) $(results.T*hc) $(results.pressure[i]) ")
-                write(io, "$(results.dpre_dmu1[i]) $(results.dpre_dmu2[i]) $(results.dpre_dmu3[i]) $(results.dpre_dmu4[i]) ")
-                write(io, "$(results.kappa1[i]) $(results.kappa2[i]) $(results.kappa3[i]) $(results.kappa4[i]) ")
-                write(io, "$(results.fluctuation_ratios[i,1]) $(results.fluctuation_ratios[i,2]) $(results.fluctuation_ratios[i,3])\n")
+                write(io, "$(results.μ_B[i]*hc),$(results.T*hc),$(results.pressure[i]),")
+                write(io, "$(results.dpre_dmu1[i]),$(results.dpre_dmu2[i]),$(results.dpre_dmu3[i]),$(results.dpre_dmu4[i]),")
+                write(io, "$(results.kappa1[i]),$(results.kappa2[i]),$(results.kappa3[i]),$(results.kappa4[i]),")
+                write(io, "$(results.fluctuation_ratios[i,1]),$(results.fluctuation_ratios[i,2]),$(results.fluctuation_ratios[i,3])\n")
             end
         end
-        println("文件保存成功!")
+        println("CSV文件保存成功!")
     catch e
-        println("保存文件时出错: $e")
+        println("保存CSV文件时出错: $e")
         rethrow(e)
     end
 end
 
-
-#示例用法:
-
-# 设置基本参数
-nodes = get_nodes(256)
-T = 50.0/hc
-gsigma = 1.25
-gdelta = 0.01
-fs = 10.329
-fo = 5.423
-fr = 3.15
-fd = 2.5
-b = 0.00692
-c = -0.0048
-couplings = [fs, fo, fr, fd, b, c]
-
-# 单点计算示例
-μ_B = 1001.0/hc
-params = [T, μ_B]
-mu_p = μ_B / 2.0
-mu_n = μ_B / 2.0
-x0 = [gsigma, gdelta, mu_p, mu_n]
-
-# 方法1: 使用通用导数计算函数
-pressure, derivatives = calculate_pressure_derivatives(μ_B, T, x0, nodes, couplings)
-println("压强: ", pressure)
-println("一阶导数: ", derivatives[1])
-println("二阶导数: ", derivatives[2])
-println("三阶导数: ", derivatives[3])
-println("四阶导数: ", derivatives[4])
-
-# 方法2: 使用高效导数计算函数
-pressure, dpre_dmu1, dpre_dmu2, dpre_dmu3, dpre_dmu4 = 
-    calculate_pressure_derivatives_efficient(μ_B, T, x0, nodes, couplings)
-
-# 方法3: 计算热力学涨落
-kappa1, kappa2, kappa3, kappa4, fluctuation_ratios = 
-    calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
+function calculate_fluctuation_ratios_vs_temperature(μ_B, T_min, T_max, x0, nodes, couplings; 
+                                                   T_step=1.0/hc, save_results=false, 
+                                                   output_file=joinpath(@__DIR__, "..", "output", "fluctuation_ratios_vs_T.csv"))
+    """
+    固定重子化学势μ_B，改变温度T，计算不同温度下的κ₃/κ₁和κ₄/κ₂
     
-println("累积量:")
-println("κ₁ = ", kappa1)
-println("κ₂ = ", kappa2) 
-println("κ₃ = ", kappa3)
-println("κ₄ = ", kappa4)
-println("涨落比值: κ₂/κ₁ = ", fluctuation_ratios[1])
-println("涨落比值: κ₃/κ₂ = ", fluctuation_ratios[2])
-println("涨落比值: κ₄/κ₂ = ", fluctuation_ratios[3])
+    参数:
+    - μ_B: 固定的重子化学势
+    - T_min: 最小温度
+    - T_max: 最大温度  
+    - x0: 初始猜测值 [gσ, gδ, μ_p, μ_n]
+    - nodes: 积分节点和权重
+    - couplings: 耦合常数 [fσ, fω, fρ, fδ, b, c]
+    - T_step: 温度步长 (默认1/hc)
+    - save_results: 是否保存结果到文件
+    - output_file: 输出文件名
+    
+    返回:
+    - temperature_array: 温度数组
+    - kappa3_over_kappa1: κ₃/κ₁数组
+    - kappa4_over_kappa2: κ₄/κ₂数组
+    - results_matrix: [温度, κ₃/κ₁, κ₄/κ₂] 格式的结果矩阵
+    """
+    
+    # 生成温度数组
+    T_array = T_min:T_step:T_max
+    n_points = length(T_array)
+    
+    # 预分配结果数组
+    temperature_array = zeros(n_points)
+    kappa3_over_kappa1 = zeros(n_points)
+    kappa4_over_kappa2 = zeros(n_points)
+    
+    println("开始计算固定μ_B = $(μ_B*hc) MeV下，$(n_points) 个温度点的涨落比值...")
+    println("温度范围: $(T_min*hc) - $(T_max*hc) MeV，步长: $(T_step*hc) MeV")
+    
+    # 循环计算每个温度点
+    for (i, T) in enumerate(T_array)
+        try
+            # 计算热力学涨落
+            kappa1, kappa2, kappa3, kappa4, _ = 
+                calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
+            
+            # 存储结果
+            temperature_array[i] = T
+            
+            # 计算涨落比值，避免除零
+            if abs(kappa1) > 1e-12
+                kappa3_over_kappa1[i] = kappa3 / kappa1
+            else
+                kappa3_over_kappa1[i] = NaN
+            end
+            
+            if abs(kappa2) > 1e-12
+                kappa4_over_kappa2[i] = kappa4 / kappa2
+            else
+                kappa4_over_kappa2[i] = NaN
+            end
+            
+            # 进度报告
+            if i % 10 == 0 || i == n_points
+                println("已完成: $(i)/$(n_points) ($(round(i/n_points*100, digits=1))%) - T = $(T*hc) MeV")
+            end
+            
+        catch e
+            println("警告: 温度 T = $(T*hc) MeV 处计算失败: $e")
+            # 填入NaN值
+            temperature_array[i] = T
+            kappa3_over_kappa1[i] = NaN
+            kappa4_over_kappa2[i] = NaN
+        end
+    end
+    
+    # 创建结果矩阵 [温度, κ₃/κ₁, κ₄/κ₂]
+    results_matrix = hcat(temperature_array .* hc, kappa3_over_kappa1, kappa4_over_kappa2)
+    
+    # 保存结果到文件
+    if save_results
+        save_fluctuation_ratios_results(results_matrix, μ_B, output_file)
+        println("结果已保存到文件: $output_file")
+    end
+    
+    println("温度扫描计算完成!")
+    return temperature_array, kappa3_over_kappa1, kappa4_over_kappa2, results_matrix
+end
 
-# 批量计算示例
-μ_B_range = 1001.0/hc:-10.0/hc:600.0/hc  # 从1001 MeV开始
-results = calculate_derivatives_batch(μ_B_range, T, x0, nodes, couplings, 
-                                    save_results=true, output_file=joinpath(@__DIR__, "..", "output", "pressure_derivatives.dat"))
+function save_fluctuation_ratios_results(results_matrix, μ_B, filename)
+    """保存涨落比值计算结果到CSV文件"""
+    println("正在保存涨落比值结果到CSV文件: $filename")
+    
+    # 确保输出目录存在
+    output_dir = dirname(filename)
+    if !isdir(output_dir)
+        println("创建输出目录: $output_dir")
+        mkpath(output_dir)
+    end
+    
+    try
+        open(filename, "w") do io
+            # 写入CSV文件头
+            write(io, "# 涨落比值随温度变化结果\n")
+            write(io, "# 固定重子化学势: μ_B = $(μ_B*hc) MeV\n")
+            write(io, "T_MeV,kappa3_over_kappa1,kappa4_over_kappa2\n")
+            
+            # 写入数据
+            for i in 1:size(results_matrix, 1)
+                write(io, "$(results_matrix[i,1]),$(results_matrix[i,2]),$(results_matrix[i,3])\n")
+            end
+        end
+        println("CSV文件保存成功!")
+    catch e
+        println("保存CSV文件时出错: $e")
+        rethrow(e)
+    end
+end
