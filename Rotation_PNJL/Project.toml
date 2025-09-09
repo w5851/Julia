@@ -1,3 +1,8 @@
+name = "RotationPNJL"
+uuid = "87654321-4321-8765-cba9-987654321abc"
+authors = ["Physics Research Team"]
+version = "0.1.0"
+
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
@@ -7,3 +12,6 @@ NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
 PackageAnalyzer = "e713c705-17e4-4cec-abe0-95bf5bf3e10c"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+julia = "1.6"
