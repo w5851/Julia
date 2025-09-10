@@ -62,7 +62,12 @@ end
 
 @inline function calculate_δ_term(gδ,ρ_ps,ρ_ns,couplings)
     fδ = couplings[4]
-    return -gδ + fδ * (ρ_ps - ρ_ns)
+    # 如果fδ = 0，则强制gδ = 0（δ介子耦合消失）
+    if fδ == 0.0
+        return -gδ  # 这将强制gδ = 0以满足约束条件
+    else
+        return -gδ + fδ * (ρ_ps - ρ_ns)
+    end
 end
 
 @inline function calculate_ρ_term(gρ,ρ_p,ρ_n,couplings)
@@ -145,8 +150,12 @@ end
                (1.0/(2.0*fσ)) * gσ^2 + 
                (1.0/(2.0*fω)) * gω^2 + 
                p_p + p_n + 
-               (1.0/(2.0*fρ)) * gρ^2 - 
-               (1.0/(2.0*fδ)) * gδ^2
+               (1.0/(2.0*fρ)) * gρ^2
+    
+    # 处理δ介子项：如果fδ = 0，则该项为0；否则正常计算
+    if fδ != 0.0
+        pressure -= (1.0/(2.0*fδ)) * gδ^2
+    end
                
     return pressure
 end
