@@ -187,7 +187,7 @@ end
 
 function calculate_pressure_derivatives(μ_B, T, x0, nodes, couplings; order=4, method=central_fdm(5, 1))
     """
-    计算压强对重子化学势μ_B的一到四阶导数
+    计算无量纲压强P/T⁴对无量纲化学势μ/T的一到四阶导数
     
     参数:
     - μ_B: 重子化学势
@@ -199,15 +199,22 @@ function calculate_pressure_derivatives(μ_B, T, x0, nodes, couplings; order=4, 
     - method: 有限差分方法 (默认5点中心差分)
     
     返回:
-    - pressure: 压强值
+    - pressure_normalized: 无量纲压强 P/T⁴
     - derivatives: 包含一到四阶导数的数组
     """
     
-    # 定义压强函数，只依赖于μ_B
-    pressure_func = μ -> calculate_pressure_solved(μ, T, x0, nodes, couplings)
+    # 定义无量纲压强函数，只依赖于无量纲化学势
+    pressure_normalized_func = μ_norm -> begin
+        μ_physical = μ_norm * T  # 转换回物理化学势
+        pressure_physical = calculate_pressure_solved(μ_physical, T, x0, nodes, couplings)
+        return pressure_physical / (T^4)  # 返回无量纲压强
+    end
     
-    # 计算压强值
-    pressure = pressure_func(μ_B)
+    # 当前的无量纲化学势
+    μ_B_normalized = μ_B / T
+    
+    # 计算无量纲压强值
+    pressure_normalized = pressure_normalized_func(μ_B_normalized)
     
     # 计算各阶导数
     derivatives = zeros(order)
@@ -215,16 +222,16 @@ function calculate_pressure_derivatives(μ_B, T, x0, nodes, couplings; order=4, 
     for i in 1:order
         # 创建相应阶数的有限差分方法
         fdm_method = central_fdm(5, i)
-        derivatives[i] = fdm_method(pressure_func, μ_B)
+        derivatives[i] = fdm_method(pressure_normalized_func, μ_B_normalized)
     end
     
-    return pressure, derivatives
+    return pressure_normalized, derivatives
 end
 
 function calculate_pressure_derivatives_efficient(μ_B, T, x0, nodes, couplings; h=1e-5)
     """
-    高效计算压强对重子化学势μ_B的一到四阶导数
-    使用预定义的有限差分方法以提高性能
+    高效计算无量纲压强P/T⁴对无量纲化学势μ/T的一到四阶导数
+    这是热力学中的标准做法，可以得到正确的累积量
     
     参数:
     - μ_B: 重子化学势
@@ -235,15 +242,23 @@ function calculate_pressure_derivatives_efficient(μ_B, T, x0, nodes, couplings;
     - h: 步长 (默认1e-5)
     
     返回:
-    - pressure: 压强值
-    - dpre_dmu1: 一阶导数 ∂P/∂μ_B
-    - dpre_dmu2: 二阶导数 ∂²P/∂μ_B²
-    - dpre_dmu3: 三阶导数 ∂³P/∂μ_B³
-    - dpre_dmu4: 四阶导数 ∂⁴P/∂μ_B⁴
+    - pressure_normalized: 无量纲压强 P/T⁴
+    - dpre_dmu1: 一阶导数 ∂(P/T⁴)/∂(μ/T)
+    - dpre_dmu2: 二阶导数 ∂²(P/T⁴)/∂(μ/T)²
+    - dpre_dmu3: 三阶导数 ∂³(P/T⁴)/∂(μ/T)³
+    - dpre_dmu4: 四阶导数 ∂⁴(P/T⁴)/∂(μ/T)⁴
     """
     
-    # 定义压强函数
-    pressure_func = μ -> calculate_pressure_solved(μ, T, x0, nodes, couplings)
+    # 定义无量纲压强函数 P/T⁴ 对无量纲化学势 μ/T 的函数
+    # 注意：μ_normalized = μ/T，所以 μ = μ_normalized * T
+    pressure_normalized_func = μ_norm -> begin
+        μ_physical = μ_norm * T  # 转换回物理化学势
+        pressure_physical = calculate_pressure_solved(μ_physical, T, x0, nodes, couplings)
+        return pressure_physical / (T^4)  # 返回无量纲压强
+    end
+    
+    # 当前的无量纲化学势
+    μ_B_normalized = μ_B / T
     
     # 预定义有限差分方法
     fdm1 = central_fdm(5, 1)  # 一阶导数，5点中心差分
@@ -251,20 +266,20 @@ function calculate_pressure_derivatives_efficient(μ_B, T, x0, nodes, couplings;
     fdm3 = central_fdm(7, 3)  # 三阶导数，7点中心差分
     fdm4 = central_fdm(7, 4)  # 四阶导数，7点中心差分
     
-    # 计算压强和各阶导数
-    pressure = pressure_func(μ_B)
-    dpre_dmu1 = fdm1(pressure_func, μ_B)
-    dpre_dmu2 = fdm2(pressure_func, μ_B)
-    dpre_dmu3 = fdm3(pressure_func, μ_B)
-    dpre_dmu4 = fdm4(pressure_func, μ_B)
+    # 计算无量纲压强和各阶导数
+    pressure_normalized = pressure_normalized_func(μ_B_normalized)
+    dpre_dmu1 = fdm1(pressure_normalized_func, μ_B_normalized)
+    dpre_dmu2 = fdm2(pressure_normalized_func, μ_B_normalized)
+    dpre_dmu3 = fdm3(pressure_normalized_func, μ_B_normalized)
+    dpre_dmu4 = fdm4(pressure_normalized_func, μ_B_normalized)
     
-    return pressure, dpre_dmu1, dpre_dmu2, dpre_dmu3, dpre_dmu4
+    return pressure_normalized, dpre_dmu1, dpre_dmu2, dpre_dmu3, dpre_dmu4
 end
 
 function calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
     """
     计算热力学涨落相关量
-    基于压强对化学势的导数计算累积量和涨落
+    基于无量纲压强P/T⁴对无量纲化学势μ/T的导数计算累积量和涨落
     
     参数:
     - μ_B: 重子化学势
@@ -274,23 +289,24 @@ function calculate_thermodynamic_fluctuations(μ_B, T, x0, nodes, couplings)
     - couplings: 耦合常数 [fσ, fω, fρ, fδ, b, c]
     
     返回:
-    - kappa1: 第一累积量 (数密度)
-    - kappa2: 第二累积量 (方差)
-    - kappa3: 第三累积量 (偏度)
-    - kappa4: 第四累积量 (峰度)
+    - kappa1: 第一累积量 (重子数密度/T³)
+    - kappa2: 第二累积量 (重子数涨落/T³)
+    - kappa3: 第三累积量 (三阶累积量/T³)
+    - kappa4: 第四累积量 (四阶累积量/T³)
     - fluctuation_ratios: 涨落比值 [κ₂/κ₁, κ₃/κ₂, κ₄/κ₂]
     """
     
-    # 计算压强和导数
-    pressure, dpre_dmu1, dpre_dmu2, dpre_dmu3, dpre_dmu4 = 
+    # 计算无量纲压强和导数
+    pressure_normalized, dpre_dmu1, dpre_dmu2, dpre_dmu3, dpre_dmu4 = 
         calculate_pressure_derivatives_efficient(μ_B, T, x0, nodes, couplings)
     
-    # 根据Fortran代码中的公式计算累积量
-    # 注意：这里假设压强已经按T⁴归一化
-    kappa1 = dpre_dmu1  # 第一累积量：数密度
-    kappa2 = dpre_dmu2  # 第二累积量：方差
-    kappa3 = dpre_dmu3  # 第三累积量：偏度
-    kappa4 = dpre_dmu4  # 第四累积量：峰度
+    # 根据热力学关系计算累积量
+    # 在相对论性情况下，累积量的定义为：
+    # κₙ = ∂ⁿ(P/T⁴)/∂(μ/T)ⁿ
+    kappa1 = dpre_dmu1  # 第一累积量：重子数密度/T³
+    kappa2 = dpre_dmu2  # 第二累积量：重子数涨落/T³
+    kappa3 = dpre_dmu3  # 第三累积量：三阶累积量/T³
+    kappa4 = dpre_dmu4  # 第四累积量：四阶累积量/T³
     
     # 计算涨落比值
     fluctuation_ratios = [

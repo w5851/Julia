@@ -25,16 +25,17 @@ gdelta = 0.01
 fs = 10.329
 fo = 5.423
 fr = 3.15
-fd = 2.5
+#fd = 2.5
+fd = 0.0
 b = 0.00692
 c = -0.0048
 couplings = [fs, fo, fr, fd, b, c]
 
 # 设置温度扫描参数
-μ_B_fixed = 1001.0/hc  # 固定重子化学势 1001 MeV
+μ_B_fixed = 697.0/hc  # 固定重子化学势 697 MeV
 T_min = 20.0/hc        # 最小温度 20 MeV
-T_max = 50.0/hc        # 最大温度 50 MeV
-T_step = 2.0/hc        # 温度步长 2 MeV (为了演示，使用较大步长)
+T_max = 150.0/hc       # 最大温度 150 MeV
+T_step = 1.0/hc        # 温度步长 1 MeV (为了演示，使用较大步长)
 
 println("固定重子化学势: μ_B = $(μ_B_fixed*hc) MeV")
 println("温度扫描范围: $(T_min*hc) - $(T_max*hc) MeV")
