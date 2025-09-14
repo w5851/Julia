@@ -8,6 +8,7 @@ using NLsolve
 using ForwardDiff
 using CSV
 using DataFrames
+using Dates
 
 # 加载PNJL模型的核心函数
 include("test_fortran_exact_derivative.jl")
@@ -123,12 +124,12 @@ function forwarddiff_temperature_scan(μ_B, T_min, T_max, T_step, output_file)
     nodes = get_nodes(256)
     gsigma = 1.25
     gdelta = 0.01
-    fs = 10.329
-    fo = 5.423
-    fr = 3.15
+    fs = 17.28476
+    fo = 11.66174
+    fr = 0.89363
     fd = 0.0
-    b = 0.00692
-    c = -0.0048
+    b = 0.00210
+    c = -0.00297
     couplings = [fs, fo, fr, fd, b, c]
     
     model_params = (nodes, couplings)
@@ -143,6 +144,15 @@ function forwarddiff_temperature_scan(μ_B, T_min, T_max, T_step, output_file)
     println("固定μ_B = $(μ_B*hc) MeV，$(n_temps) 个温度点")
     println("温度范围: $(T_min*hc) - $(T_max*hc) MeV，步长: $(T_step*hc) MeV")
     println("使用固定初解，不进行迭代更新")
+    println("\n模型参数:")
+    println("  gsigma = $gsigma")
+    println("  gdelta = $gdelta")
+    println("  fs = $fs")
+    println("  fo = $fo")
+    println("  fr = $fr")
+    println("  fd = $fd")
+    println("  b = $b")
+    println("  c = $c")
     
     # 预分配结果数组
     results = []
@@ -245,9 +255,40 @@ function forwarddiff_temperature_scan(μ_B, T_min, T_max, T_step, output_file)
         mkpath(output_dir)
     end
     
-    # 保存CSV文件
+    # 保存CSV文件 - 包含元数据头部
     try
-        CSV.write(output_file, df)
+        # 手动写入带有元数据的CSV文件
+        open(output_file, "w") do io
+            # 写入元数据头部（以#开头的注释行）
+            println(io, "# ForwardDiff Temperature Scan Results")
+            println(io, "# Generated on: $(Dates.now())")
+            println(io, "# Model Parameters:")
+            println(io, "# gsigma = $gsigma")
+            println(io, "# gdelta = $gdelta")
+            println(io, "# fs = $fs")
+            println(io, "# fo = $fo")
+            println(io, "# fr = $fr")
+            println(io, "# fd = $fd")
+            println(io, "# b = $b")
+            println(io, "# c = $c")
+            println(io, "# mu_B = $(μ_B*hc) MeV")
+            println(io, "# T_range = $(T_min*hc) - $(T_max*hc) MeV")
+            println(io, "# T_step = $(T_step*hc) MeV")
+            println(io, "# nodes = $(length(nodes))")
+            println(io, "#")
+            
+            # 写入CSV数据部分
+            # 首先写入列名
+            col_names = names(df)
+            println(io, join(col_names, ","))
+            
+            # 然后写入数据行
+            for row in eachrow(df)
+                values = [string(row[col]) for col in col_names]
+                println(io, join(values, ","))
+            end
+        end
+        
         println("✓ 结果已保存到: $output_file")
         
         # 显示统计信息
@@ -287,7 +328,7 @@ T_max = 200.0/hc      # 最大温度 200 MeV
 T_step = 1.0/hc       # 温度步长 1 MeV
 
 # 设置输出文件路径
-output_file = joinpath(@__DIR__, "..", "..", "output", "forwarddiff_temperature_scan.csv")
+output_file = joinpath(@__DIR__, "..", "..", "output", "Gas_Liquid", "forwarddiff_temperature_scan.csv")
 
 println("扫描参数:")
 println("μ_B = $(μ_B_fixed*hc) MeV (固定)")

@@ -12,6 +12,8 @@ packages = [
     "BenchmarkTools",
     "FastGaussQuadrature",
     "CSV",
+    "DataFrames",
+    "Plots",
     "PackageAnalyzer"  # 添加项目中需要的额外包
 ]
 
