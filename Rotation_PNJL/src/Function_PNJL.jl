@@ -1,7 +1,7 @@
 include("Constants_PNJL.jl")
-include("init3.jl")
+include("init.jl")
 using .Constants_PNJL:hc, π, rho0, a0, a1, a2, b3, b4, T0, Nc, Lambda_f, G_f, K_f, m0,m0_q_f,m0_s_f
-using .init3:gauleg
+using .init:gauleg
 using SpecialFunctions: log, exp
 using ForwardDiff
 using NLsolve

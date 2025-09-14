@@ -1,4 +1,4 @@
-module init3
+module init
 
 using FastGaussQuadrature
 export gauleg
@@ -11,4 +11,4 @@ function gauleg(a, b, n)
 end
 
 
-end  # module init3
+end  # module init

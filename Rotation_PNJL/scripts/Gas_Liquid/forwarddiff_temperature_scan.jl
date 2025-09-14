@@ -11,7 +11,7 @@ using DataFrames
 using Dates
 
 # 加载PNJL模型的核心函数
-include("../../src/Function_Gas_Liquid.jl")
+include("../../src/Gas_Liquid/Function_Gas_Liquid.jl")
 
 function NewQuark_mu_pnjl_fixed(x_array, T, mu_B, model_params)
     """

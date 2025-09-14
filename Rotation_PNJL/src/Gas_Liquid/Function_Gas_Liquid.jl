@@ -1,7 +1,7 @@
 include("Constants_Gas_Liquid.jl")
-include("init3.jl")
+include("../init.jl")
 using .Constants_Gas_Liquid: π, hc, m, mσ, mω, mρ, mδ, calculate_couplings
-using .init3: gauleg
+using .init: gauleg
 using NLsolve
 using FiniteDifferences
 
