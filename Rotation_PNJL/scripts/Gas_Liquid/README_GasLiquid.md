@@ -1,26 +1,13 @@
 # Gas_Liquid 脚本文件夹
 
-这个文件夹包含了与气液相变程序相关的ForwardDiff自动微分计算脚本。
+这个文件夹包含了与气液相变程序相关的应用层脚本和可视化工具。
 
-## 📁 文件说明
+> **🏗️ 架构说明**: 核心ForwardDiff自动微分计算功能已迁移到 `src/Gas_Liquid/Advanced_ForwardDiff.jl` 模块中。本文件夹现在专注于应用层脚本和数据可视化。
 
-### 1. `forwarddiff_temperature_scan.jl` - 主计算脚本
-**功能**: 使用ForwardDiff方法进行PNJL模型的温度扫描计算
+## � 文件说明
 
-**主要特性**:
-- 🔥 **高精度自动微分**: 使用ForwardDiff计算一到四阶压强导数
-- 📊 **温度扫描**: 固定重子化学势μ_B，扫描温度范围20-200 MeV
-- 🎯 **热力学涨落**: 计算κ₃/κ₁和κ₄/κ₂比值，用于相变研究
-- 💾 **数据输出**: 自动保存带元数据的CSV格式结果文件
-
-**计算内容**:
-- 压强归一化值 P/T⁴
-- 一阶到四阶累积量 κ₁, κ₂, κ₃, κ₄
-- 热力学涨落比值 κ₃/κ₁ 和 κ₄/κ₂
-- 化学势温度比 μ/T
-
-### 2. `plot_temperature_scan.jl` - 数据可视化脚本
-**功能**: 读取温度扫描结果并生成可视化图表
+### 1. `plot_temperature_scan.jl` - 数据可视化脚本
+**功能**: 读取ForwardDiff温度扫描结果并生成可视化图表
 
 **主要特性**:
 - 📈 **数据可视化**: 绘制κ₃/κ₁和κ₄/κ₂随温度的变化曲线
@@ -28,22 +15,29 @@
 - 🖼️ **图像保存**: 生成高分辨率PNG图像文件
 - 📊 **多图模式**: 支持比值图和各个κ值的独立展示
 
+### 2. ~~`forwarddiff_temperature_scan.jl`~~ (已迁移)
+**🔄 已迁移到**: `src/Gas_Liquid/Advanced_ForwardDiff.jl` 和 `test/Gas_Liquid/test_forwarddiff_temperature_scan.jl`
+- ✅ **函数定义**: 移动到 `src/Gas_Liquid/Advanced_ForwardDiff.jl` 模块
+- ✅ **测试程序**: 移动到 `test/Gas_Liquid/test_forwarddiff_temperature_scan.jl`
+
 ## 🚀 快速开始
 
-### 第一步：运行温度扫描计算
+### 使用新的模块化架构运行ForwardDiff计算
+
+#### 第一步：运行ForwardDiff温度扫描测试
 ```bash
-# 在项目根目录下运行
+# 在项目根目录下运行新的测试文件
 cd D:\Desktop\Julia\Rotation_PNJL
-julia --project=. scripts/Gas_Liquid/forwarddiff_temperature_scan.jl
+julia --project=. test/Gas_Liquid/test_forwarddiff_temperature_scan.jl
 ```
 
-**计算参数**:
+**计算配置**:
 - 重子化学势: μ_B = 697 MeV (固定)
 - 温度范围: 20 - 200 MeV
 - 温度步长: 1 MeV
 - 输出文件: `output/Gas_Liquid/forwarddiff_temperature_scan.csv`
 
-### 第二步：生成可视化图表
+#### 第二步：生成可视化图表
 ```bash
 # 绘制结果图表
 julia --project=. scripts/Gas_Liquid/plot_temperature_scan.jl
@@ -53,43 +47,50 @@ julia --project=. scripts/Gas_Liquid/plot_temperature_scan.jl
 - `output/Gas_Liquid/kappa_ratios_temperature_scan.png` - κ比值图
 - `output/Gas_Liquid/individual_kappas_temperature_scan.png` - 各κ值图
 
+### 使用模块化API进行自定义计算
+
+#### 方法1：直接调用Advanced_ForwardDiff模块
+```julia
+# 引入Advanced_ForwardDiff模块
+include("src/Gas_Liquid/Advanced_ForwardDiff.jl")
+
+# 设置模型参数
+nodes = get_nodes(256)
+couplings = [17.28476, 11.66174, 0.89363, 0.0, 0.00210, -0.00297]
+model_params = (nodes, couplings)
+
+# 计算单点热力学涨落
+T = 100.0 / hc  # 100 MeV
+μ_B = 697.0 / hc  # 697 MeV
+κ1, κ2, κ3, κ4, κ3_κ1, κ4_κ2 = calculate_forwarddiff_thermodynamic_fluctuations(
+    1.25, 0.01, T, μ_B, model_params)
+
+println("κ₃/κ₁ = $κ3_κ1")
+println("κ₄/κ₂ = $κ4_κ2")
+```
+
+#### 方法2：使用温度扫描函数
+```julia
+include("src/Gas_Liquid/Advanced_ForwardDiff.jl")
+
+# 自定义温度扫描
+df_results = forwarddiff_temperature_scan(
+    697.0/hc,           # μ_B
+    50.0/hc,            # T_min  
+    150.0/hc,           # T_max
+    2.0/hc,             # T_step
+    "output/Gas_Liquid/custom_scan.csv";  # 输出文件
+    gsigma=1.25,        # 场初值
+    gdelta=0.01,
+    n_nodes=128         # 减少积分点以提高速度
+)
+```
+
+**输出图像**:
+- `output/Gas_Liquid/kappa_ratios_temperature_scan.png` - κ比值图
+- `output/Gas_Liquid/individual_kappas_temperature_scan.png` - 各κ值图
+
 ## 📋 详细使用说明
-
-### `forwarddiff_temperature_scan.jl` 使用方法
-
-#### 基本运行
-脚本使用预设参数运行，无需额外配置：
-
-```julia
-# 直接运行脚本
-julia --project=. scripts/Gas_Liquid/forwarddiff_temperature_scan.jl
-```
-
-#### 参数配置
-可以在脚本中修改以下参数：
-
-```julia
-# 在脚本末尾的主程序部分
-μ_B_fixed = 697.0/hc      # 重子化学势 (MeV)
-T_min = 20.0/hc           # 最小温度 (MeV) 
-T_max = 200.0/hc          # 最大温度 (MeV)
-T_step = 1.0/hc           # 温度步长 (MeV)
-```
-
-#### 模型参数
-PNJL模型参数设置在 `forwarddiff_temperature_scan()` 函数中：
-
-```julia
-# 模型参数
-gsigma = 1.25     # sigma场初值
-gdelta = 0.01     # delta场初值
-fs = 17.28476     # sigma耦合常数
-fo = 11.66174     # omega耦合常数
-fr = 0.89363      # rho耦合常数
-fd = 0.0          # delta耦合常数
-b = 0.00210       # 三次项系数
-c = -0.00297      # 四次项系数
-```
 
 ### `plot_temperature_scan.jl` 使用方法
 
@@ -117,6 +118,69 @@ p1 = plot_temperature_scan_results("output/Gas_Liquid/forwarddiff_temperature_sc
 p2 = plot_individual_kappas("output/Gas_Liquid/forwarddiff_temperature_scan.csv", 
                             "my_kappas.png")
 ```
+
+### ForwardDiff计算模块使用方法
+
+> **📍 核心计算功能位置**: `src/Gas_Liquid/Advanced_ForwardDiff.jl`
+
+#### 基本ForwardDiff计算
+```julia
+include("src/Gas_Liquid/Advanced_ForwardDiff.jl")
+
+# 设置模型参数
+nodes = get_nodes(256)
+couplings = [17.28476, 11.66174, 0.89363, 0.0, 0.00210, -0.00297]
+model_params = (nodes, couplings)
+
+# 计算单点导数
+T = 100.0 / hc
+μ_B = 697.0 / hc
+d1, d2, d3, d4 = calculate_forwarddiff_derivatives(1.25, 0.01, T, μ_B, model_params)
+```
+
+#### 模型参数配置
+```julia
+# PNJL模型参数可以在调用时指定：
+df_results = forwarddiff_temperature_scan(
+    μ_B, T_min, T_max, T_step, output_file;
+    gsigma=1.25,        # sigma场初值
+    gdelta=0.01,        # delta场初值  
+    fs=17.28476,        # sigma耦合常数
+    fo=11.66174,        # omega耦合常数
+    fr=0.89363,         # rho耦合常数
+    fd=0.0,             # delta耦合常数
+    b=0.00210,          # 三次项系数
+    c=-0.00297,         # 四次项系数
+    n_nodes=256         # 积分节点数
+)
+```
+
+## 📊 架构变更说明
+
+### 🔄 迁移前后对比
+
+| 迁移前 | 迁移后 |
+|--------|--------|
+| `scripts/Gas_Liquid/forwarddiff_temperature_scan.jl` | `src/Gas_Liquid/Advanced_ForwardDiff.jl` (函数定义) |
+| 单文件包含函数+主程序 | `test/Gas_Liquid/test_forwarddiff_temperature_scan.jl` (测试程序) |
+| 脚本层面调用 | 模块化API调用 |
+
+### ✅ 新架构优势
+
+1. **模块化设计**: 
+   - 函数定义与测试程序分离
+   - 可重用的API接口
+   - 更清晰的代码结构
+
+2. **更好的可维护性**:
+   - 函数集中在src目录便于管理
+   - 测试文件独立，便于验证
+   - 文档结构更加清晰
+
+3. **灵活的调用方式**:
+   - 可以直接调用单个函数
+   - 支持批量计算和自定义参数
+   - 便于集成到其他脚本中
 
 ## 📊 输出文件格式
 
@@ -206,12 +270,20 @@ Pkg.add(["NLsolve", "ForwardDiff", "CSV", "DataFrames", "Plots"])
 mkdir -p output/Gas_Liquid
 ```
 
-**3. 计算收敛失败**
-- 调整模型参数 (gsigma, gdelta)
+**3. ForwardDiff计算收敛失败**
+- 调整模型参数 (gsigma, gdelta)  
 - 减小温度步长
 - 检查化学势范围的合理性
+- 参考 `src/Gas_Liquid/Advanced_ForwardDiff.jl` 中的错误处理
 
-**4. 绘图失败 (SSH环境)**
+**4. 模块导入失败**
+```julia
+# 确保使用正确的相对路径
+include("src/Gas_Liquid/Advanced_ForwardDiff.jl")  # 从项目根目录运行
+include("../../src/Gas_Liquid/Advanced_ForwardDiff.jl")  # 从test目录运行
+```
+
+**5. 绘图失败 (SSH环境)**
 ```julia
 # 确保使用GR后端且保存文件而不显示
 using Plots
@@ -239,8 +311,10 @@ gr()  # 设置后端
 ## 📚 相关文档
 
 - **主项目文档**: `../../docs/`
-- **核心函数文档**: `../../src/Function_Gas_Liquid.jl`
-- **测试文件**: `../../test/test_gas_liquid.jl`
+- **ForwardDiff模块**: `../../src/Gas_Liquid/Advanced_ForwardDiff.jl`
+- **模块分离说明**: `../../src/Gas_Liquid/MODULE_SEPARATION_README.md`
+- **核心函数文档**: `../../src/Gas_Liquid/Function_Gas_Liquid.jl`
+- **测试文件**: `../../test/Gas_Liquid/test_forwarddiff_temperature_scan.jl`
 - **使用指南**: `../../USAGE_GUIDE.md`
 
 ## 🤝 贡献指南
@@ -248,8 +322,16 @@ gr()  # 设置后端
 如需修改或扩展这些脚本：
 
 1. **备份原始文件**
-2. **测试修改后的功能**  
-3. **更新文档和注释**
+2. **更新模块化代码**: 修改 `src/Gas_Liquid/Advanced_ForwardDiff.jl` 中的函数
+3. **更新测试文件**: 修改 `test/Gas_Liquid/test_forwarddiff_temperature_scan.jl`
+4. **测试修改后的功能**  
+5. **更新文档和注释**
+6. **保持API兼容性**
+
+---
+**最后更新**: 2025年9月14日  
+**架构版本**: v2.0 (模块化)  
+**维护者**: Rotation_PNJL项目组
 4. **添加适当的错误处理**
 5. **保持代码风格一致性**
 
