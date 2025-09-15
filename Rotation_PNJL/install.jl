@@ -100,6 +100,8 @@ catch e
         "CSV",
         "DataFrames",
         "Plots",
+        "FastGaussQuadrature",
+        "FiniteDifferences",
         "BenchmarkTools"
     ]
     
@@ -126,6 +128,8 @@ test_packages = [
     ("CSV", "CSV文件处理"),
     ("DataFrames", "数据框处理"),
     ("Plots", "数据可视化"),
+    ("FastGaussQuadrature", "快速高斯积分"),
+    ("FiniteDifferences", "有限差分"),
     ("BenchmarkTools", "性能测试")
 ]
 

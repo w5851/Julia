@@ -2,6 +2,10 @@
 # 温度反向查找使用示例
 # 演示如何使用Advanced_FindTforDiff.jl模块查找特定κ比值对应的温度
 
+# 激活项目环境
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "../.."))
+
 using Printf
 
 # 引入温度查找模块

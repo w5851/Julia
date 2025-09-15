@@ -3,6 +3,10 @@
 使用CSV文件中的数据绘制kappa3/kappa1和kappa4/kappa2随温度T_MeV的变化
 """
 
+# 激活项目环境
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "../.."))
+
 using Plots, CSV, DataFrames
 
 # 设置绘图后端，避免中文字符问题

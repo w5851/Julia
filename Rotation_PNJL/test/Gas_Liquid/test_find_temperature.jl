@@ -2,6 +2,10 @@
 # 测试温度反向查找功能
 # 测试Advanced_FindTforDiff.jl模块中的温度查找功能
 
+# 激活项目环境
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "../.."))
+
 using Printf
 using Dates
 

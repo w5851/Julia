@@ -2,6 +2,10 @@
 # ForwardDiff温度扫描功能测试
 # 测试Advanced_ForwardDiff.jl模块中的ForwardDiff自动微分功能
 
+# 激活项目环境
+import Pkg
+Pkg.activate(joinpath(@__DIR__, "../.."))
+
 using Printf
 using Dates
 
