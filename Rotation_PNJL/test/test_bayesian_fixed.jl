@@ -1,9 +1,15 @@
 # test_bayesian_fixed.jl
 # 修复所有问题的BayesianOptimization.jl测试
 
-# 激活项目环境
+# 激活项目环境 - 使用绝对路径确保正确的项目环境
 import Pkg
-Pkg.activate("..")
+# 获取当前文件的目录，然后向上一级到项目根目录
+project_root = joinpath(@__DIR__, "..")
+Pkg.activate(project_root)
+println("✅ 激活项目环境: ", project_root)
+
+# 临时抑制kwargs相关的兼容性警告（这是已知的非致命问题）
+ENV["JULIA_WARN_OVERWRITE"] = "0"
 
 using BayesianOptimization
 using GaussianProcesses

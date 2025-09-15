@@ -268,3 +268,13 @@ BayesianOptimization.jl 提供了完整的贝叶斯优化功能，关键是：
 - 合理配置 `kernbounds`（下界 <= 上界）
 - 选择合适的采集函数和模型优化器
 - 从简单配置开始，逐步增加复杂性
+
+
+注意：
+┌ Warning: use values(kwargs) and keys(kwargs) instead of kwargs.data and kwargs.itr
+│   caller = #MAPGPOptimizer#19 at gp.jl:37 [inlined]
+关于这个警告的详细说明：
+为什么会出现这个警告？
+Julia 语言演进：Julia 在版本更新中改进了命名元组(NamedTuple)的API
+包的滞后更新：BayesianOptimization.jl 包还没有完全适配最新的Julia语法
+向后兼容性：Julia保持了向后兼容，所以旧代码仍能运行，只是会给出警告

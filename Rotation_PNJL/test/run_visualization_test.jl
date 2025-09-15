@@ -2,7 +2,10 @@
 # 测试可视化功能
 
 import Pkg
-Pkg.activate("..")
+# 获取当前文件的目录，然后向上一级到项目根目录
+project_root = joinpath(@__DIR__, "..")
+Pkg.activate(project_root)
+println("✅ 激活项目环境: ", project_root)
 
 println("🎨 测试数据可视化功能")
 println("=" ^ 60)
