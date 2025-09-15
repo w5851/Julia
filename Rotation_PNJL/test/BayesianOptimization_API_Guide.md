@@ -38,6 +38,157 @@ result = boptimize!(opt)
 - `Silent`, `Timings`, `Progress` - 详细程度
 - `maxduration!`, `maxiterations!` - 动态调整
 
+## 🎯 向目标函数传递额外参数
+
+BayesianOptimization.jl 支持多种方式向目标函数传递额外参数：
+
+### 方法1：使用闭包 (推荐)
+
+```julia
+# 问题参数
+param1 = 2.0
+param2 = [1.0, 2.0, 3.0]
+
+# 创建闭包函数
+function create_objective(p1, p2)
+    return function objective(x)
+        # 使用外部参数 p1, p2 和输入 x
+        return -(x[1] - p1)^2 - (x[2] - p1)^2 + sum(p2)
+    end
+end
+
+# 生成带参数的目标函数
+f_with_params = create_objective(param1, param2)
+
+# 用于优化
+opt = BOpt(f_with_params, model, acquisition, modeloptimizer, 
+           lowerbounds, upperbounds)
+```
+
+### 方法2：使用 lambda 表达式
+
+```julia
+# 参数
+noise_level = 0.1
+scale_factor = 2.0
+
+# 创建带参数的目标函数
+f = x -> expensive_function(x, noise_level, scale_factor)
+
+opt = BOpt(f, model, acquisition, modeloptimizer, bounds...)
+```
+
+### 方法3：使用柯里化（Currying）
+
+```julia
+# 原始函数接受多个参数
+function original_function(x, param1, param2, param3)
+    return sum(x.^2) + param1 * sum(x) + param2 * prod(x) + param3
+end
+
+# 柯里化：固定某些参数
+curried_f = x -> original_function(x, 1.5, 2.0, -0.5)
+
+opt = BOpt(curried_f, model, acquisition, modeloptimizer, bounds...)
+```
+
+### 方法4：使用函数对象（Functor）
+
+```julia
+# 定义包含参数的结构体
+struct ParametricObjective{T}
+    param1::T
+    param2::T
+    param3::Vector{T}
+end
+
+# 让结构体可调用
+function (obj::ParametricObjective)(x)
+    return -(x[1] - obj.param1)^2 - (x[2] - obj.param2)^2 + 
+           sum(obj.param3 .* x)
+end
+
+# 创建目标函数对象
+params = ParametricObjective(1.0, 2.0, [0.5, 0.8])
+
+opt = BOpt(params, model, acquisition, modeloptimizer, bounds...)
+```
+
+### 方法5：使用全局变量（不推荐，但可行）
+
+```julia
+# 全局参数（避免在并行环境中使用）
+global PARAM1 = 1.5
+global PARAM2 = [1, 2, 3]
+
+function objective_with_globals(x)
+    return -(x[1] - PARAM1)^2 + sum(PARAM2 .* x)
+end
+
+opt = BOpt(objective_with_globals, model, acquisition, modeloptimizer, bounds...)
+```
+
+### 实际应用示例：物理模拟参数优化
+
+```julia
+using BayesianOptimization, GaussianProcesses
+
+# 物理参数
+struct PhysicsParams
+    temperature::Float64
+    pressure::Float64
+    material_constants::Vector{Float64}
+end
+
+# 昂贵的物理模拟函数
+function physics_simulation(design_params, physics_params::PhysicsParams)
+    # 模拟复杂的物理过程
+    x1, x2 = design_params[1], design_params[2]
+    T, P = physics_params.temperature, physics_params.pressure
+    
+    # 示例：某种物理量的计算
+    result = exp(-x1^2/T) * cos(x2*P) + sum(physics_params.material_constants .* design_params)
+    
+    # 添加计算延迟模拟昂贵函数
+    sleep(0.01)  # 模拟100ms的计算时间
+    
+    return result
+end
+
+# 设置物理环境参数
+physics_params = PhysicsParams(300.0, 1.0, [0.5, 0.3])
+
+# 创建带参数的目标函数
+objective = x -> physics_simulation(x, physics_params)
+
+# 创建优化器
+model = ElasticGPE(2, mean = MeanConst(0.0), 
+                   kernel = SEArd([1.0, 1.0], 0.0))
+
+opt = BOpt(objective,
+           model,
+           ExpectedImprovement(),
+           MAPGPOptimizer(every = 5, 
+                         noisebounds = [-4, 3],
+                         kernbounds = [[-2, -2, -3], [3, 3, 2]]),
+           [-3.0, -3.0], [3.0, 3.0],
+           maxiterations = 20,
+           sense = Max)
+
+# 执行优化
+result = boptimize!(opt)
+println("最优设计参数: ", result.observed_optimizer)
+println("在给定物理条件下的最优值: ", result.observed_optimum)
+```
+
+### 注意事项
+
+1. **性能**: 闭包方法通常性能最好，因为参数在编译时被内联
+2. **内存**: 闭包会捕获外部变量，注意内存使用
+3. **类型稳定性**: 确保闭包内的参数类型是稳定的
+4. **并行性**: 避免使用全局变量，特别是在多线程环境中
+5. **调试**: 闭包可能使调试更困难，可以考虑使用函数对象
+
 ## 🔧 详细用法
 
 ### BOpt 构造函数
@@ -46,13 +197,20 @@ result = boptimize!(opt)
 BOpt(func, model, acquisition, modeloptimizer, lowerbounds, upperbounds;
      sense = Max,                    # 优化方向 (Max/Min)
      maxiterations = 10^4,           # 最大迭代次数
-     maxduration = Inf,              # 最大运行时间
+     maxduration = Inf,              # 最大运行时间 (秒)
      acquisitionoptions = NamedTuple(), # 采集函数优化选项
      repetitions = 1,                # 每个点的重复评估次数
-     verbosity = Progress,           # 输出详细程度
+     verbosity = Progress,           # 输出详细程度 (Silent/Timings/Progress)
      initializer_iterations = 5*length(lowerbounds), # 初始采样点数
-     initializer = ScaledSobolIterator(...))  # 初始化采样器
+     initializer = ScaledSobolIterator(lowerbounds, upperbounds, initializer_iterations))  # 初始化采样器
 ```
+
+**重要参数说明：**
+- `func`: 目标函数，接受一个向量参数 `x`，返回标量值
+- `model`: 高斯过程模型 (如 `ElasticGPE` 或预加载的 `GP`)
+- `acquisition`: 采集函数 (如 `ExpectedImprovement()`)
+- `modeloptimizer`: 模型超参数优化器 (如 `MAPGPOptimizer`)
+- `lowerbounds/upperbounds`: 搜索空间边界向量
 
 ### MAPGPOptimizer 详细配置
 
@@ -156,7 +314,7 @@ opt = BOpt(f, gp, UpperConfidenceBound(),
 result = boptimize!(opt)
 ```
 
-### 示例3：一维优化
+### 示例3：采集函数比较
 
 ```julia
 # 一维函数
@@ -179,7 +337,7 @@ opt_1d = BOpt(f_1d, gp_1d, ExpectedImprovement(),
               maxiterations = 20,
               initializer_iterations = 0)
 
-result_1d = boptimize!(opt)
+result_1d = boptimize!(opt_1d)
 ```
 
 ## ⚙️ 高级配置
@@ -253,7 +411,29 @@ opt = BOpt(f, gp, acquisition, NoModelOptimizer(), bounds...)
 - [官方文档](https://jbrea.github.io/BayesianOptimization.jl/dev/)
 - Brochu et al. (2010): "A Tutorial on Bayesian Optimization"
 
-## 💡 最佳实践
+## � API文档检查与验证报告
+
+### ✅ 已验证的API要点
+
+1. **BOpt构造函数签名**: 与源码完全一致
+2. **MAPGPOptimizer参数**: kernbounds格式正确 `[[下界...], [上界...]]`
+3. **高斯过程数据格式**: 确认需要 d×n 矩阵格式
+4. **采集函数类型**: 所有列出的采集函数都存在且正确
+5. **目标函数支持**: 完全支持闭包、lambda和函数对象等参数传递方式
+
+### 🔧 修正的问题
+
+1. **initializer参数**: 补充了完整的构造函数签名
+2. **函数参数传递**: 添加了详细的多种参数传递方法
+3. **示例代码**: 修正了变量名不一致的问题
+
+### 🎯 额外发现
+
+1. **Julia版本兼容性**: 警告信息是已知的非致命性问题
+2. **性能优化**: 源码显示支持 ElasticGPE 用于大规模优化
+3. **调试支持**: 提供了多种 verbosity 级别和 TimerOutput
+
+## �💡 最佳实践
 
 1. **开始简单**: 先用 `NoModelOptimizer` 测试基本功能
 2. **数据格式**: 确保 X 是 d×n 格式，y 是向量
