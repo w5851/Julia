@@ -75,7 +75,7 @@ try
     df_results = batch_find_temperatures_for_kappa_ratios(
         kappa_pairs, μ_B, T_min, T_max;
         T_step_scan=2.0/hc,  # 2 MeV 步长（加快速度）
-        output_file="../../output/Gas_Liquid/batch_temperature_finder_example.csv"
+        output_file=joinpath(@__DIR__, "../../output/Gas_Liquid/batch_temperature_finder_example.csv")
     )
     
     println("\n批量查找结果:")
