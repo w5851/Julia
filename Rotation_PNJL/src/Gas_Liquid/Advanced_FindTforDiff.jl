@@ -662,3 +662,265 @@ function save_temperature_finder_results(results, μ_B, T_min, T_max, T_step_sca
         println("✗ 保存文件失败: $e")
     end
 end
+
+function calculate_temperature_difference_sum_of_squares(
+    kappa_pairs, μ_B, optimization_params, T_min, T_max;
+    T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
+    penalty_for_missing=1e6, verbose=false)
+    """
+    计算多组κ比值在给定优化参数下对应的温度差的平方和
+    
+    此函数基于 batch_find_temperatures_with_optimization_params 的逻辑，
+    但不保存文件，直接返回优化目标值（所有组温度差的平方和）。
+    适用于参数优化过程中的目标函数计算。
+    
+    参数:
+    - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...]
+    - μ_B: 重子化学势
+    - optimization_params: 优化参数元组 (ρ₀, B_A, K, m_ratio, E_sym)
+        * ρ₀: 核饱和密度 (fm⁻³)
+        * B_A: 结合能 (MeV)
+        * K: 不可压缩模量 (MeV)
+        * m_ratio: 有效质量比
+        * E_sym: 对称能 (MeV)
+    - T_min, T_max: 温度搜索范围
+    - T_step_scan: 扫描步长
+    - gsigma, gdelta: 强子-夸克耦合参数
+    - n_nodes: 积分节点数
+    - penalty_for_missing: 当无法找到温度或计算失败时的惩罚值
+    - verbose: 是否打印详细信息（建议在优化过程中设为false）
+    
+    返回:
+    - sum_of_squares: 所有组温度差平方和 (单位: MeV²)
+      对于每组 (κ₃/κ₁, κ₄/κ₂)，计算对应的温度 T₁, T₂，
+      贡献 |T₁ - T₂|² 到总和中。
+      如果某组计算失败或找不到温度，则贡献 penalty_for_missing。
+    """
+    
+    # 解包优化参数
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    if verbose
+        println("="^80)
+        println("基于优化参数的温度差平方和计算")
+        println("="^80)
+        println("优化参数: ρ₀=$ρ₀, B_A=$B_A MeV, K=$K MeV, m_ratio=$m_ratio, E_sym=$E_sym MeV")
+        println("μ_B = $(μ_B*hc) MeV，共 $(length(kappa_pairs)) 组κ比值")
+        println("温度搜索范围: $(T_min*hc) - $(T_max*hc) MeV")
+        println("无效值惩罚: $penalty_for_missing")
+    end
+    
+    sum_of_squares = 0.0
+    valid_pairs = 0
+    failed_pairs = 0
+    
+    for (i, (kappa3_kappa1, kappa4_kappa2)) in enumerate(kappa_pairs)
+        if verbose
+            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2")
+        end
+        
+        try
+            T_k3k1, T_k4k2 = find_temperature_for_kappa_ratios_with_optimization_params(
+                kappa3_kappa1, kappa4_kappa2, μ_B, optimization_params,
+                T_min, T_max, T_step_scan;
+                gsigma=gsigma, gdelta=gdelta, n_nodes=n_nodes, verbose=false)
+            
+            # 检查是否成功找到两个温度
+            if !isnan(T_k3k1) && !isnan(T_k4k2) && isfinite(T_k3k1) && isfinite(T_k4k2)
+                # 计算温度差的平方 (转换为MeV单位)
+                temp_diff_MeV = abs(T_k3k1 - T_k4k2) * hc
+                contribution = temp_diff_MeV^2
+                sum_of_squares += contribution
+                valid_pairs += 1
+                
+                if verbose
+                    println("  ✓ T(κ₃/κ₁) = $(round(T_k3k1*hc, digits=2)) MeV")
+                    println("    T(κ₄/κ₂) = $(round(T_k4k2*hc, digits=2)) MeV")
+                    println("    |ΔT| = $(round(temp_diff_MeV, digits=2)) MeV")
+                    println("    贡献: $(round(contribution, digits=2)) MeV²")
+                end
+            else
+                # 无法找到有效温度，应用惩罚
+                sum_of_squares += penalty_for_missing
+                failed_pairs += 1
+                
+                if verbose
+                    t1_status = isnan(T_k3k1) ? "未找到" : "$(round(T_k3k1*hc, digits=2)) MeV"
+                    t2_status = isnan(T_k4k2) ? "未找到" : "$(round(T_k4k2*hc, digits=2)) MeV"
+                    println("  ✗ T(κ₃/κ₁) = $t1_status, T(κ₄/κ₂) = $t2_status")
+                    println("    应用惩罚: $penalty_for_missing")
+                end
+            end
+            
+        catch e
+            # 计算过程出错，应用惩罚
+            sum_of_squares += penalty_for_missing
+            failed_pairs += 1
+            
+            if verbose
+                println("  ✗ 计算失败: $e")
+                println("    应用惩罚: $penalty_for_missing")
+            end
+        end
+    end
+    
+    if verbose
+        println("\n" * "="^60)
+        println("计算完成")
+        println("="^60)
+        println("总组数: $(length(kappa_pairs))")
+        println("成功计算: $valid_pairs")
+        println("失败/无效: $failed_pairs") 
+        println("温度差平方和: $(round(sum_of_squares, digits=2)) MeV²")
+        if valid_pairs > 0
+            avg_contribution = (sum_of_squares - failed_pairs * penalty_for_missing) / valid_pairs
+            println("平均有效贡献: $(round(avg_contribution, digits=2)) MeV²")
+        end
+    end
+    
+    return sum_of_squares
+end
+
+function calculate_temperature_difference_sum_of_squares_with_weights(
+    kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+    T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
+    penalty_for_missing=1e6, verbose=false)
+    """
+    计算多组κ比值在给定优化参数下对应的温度差的加权平方和
+    
+    参数:
+    - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...]
+    - weights: 权重数组，与 kappa_pairs 长度相同
+    - 其他参数: 与 calculate_temperature_difference_sum_of_squares 相同
+    
+    返回:
+    - weighted_sum_of_squares: 加权温度差平方和 (单位: MeV²)
+    """
+    
+    if length(weights) != length(kappa_pairs)
+        error("权重数组长度 ($(length(weights))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
+    end
+    
+    # 解包优化参数
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    if verbose
+        println("="^80)
+        println("基于优化参数的加权温度差平方和计算")
+        println("="^80)
+        println("优化参数: ρ₀=$ρ₀, B_A=$B_A MeV, K=$K MeV, m_ratio=$m_ratio, E_sym=$E_sym MeV")
+        println("μ_B = $(μ_B*hc) MeV，共 $(length(kappa_pairs)) 组κ比值")
+        println("权重范围: $(round(minimum(weights), digits=3)) - $(round(maximum(weights), digits=3))")
+    end
+    
+    weighted_sum_of_squares = 0.0
+    valid_pairs = 0
+    failed_pairs = 0
+    
+    for (i, ((kappa3_kappa1, kappa4_kappa2), weight)) in enumerate(zip(kappa_pairs, weights))
+        if verbose
+            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2, 权重 = $weight")
+        end
+        
+        try
+            T_k3k1, T_k4k2 = find_temperature_for_kappa_ratios_with_optimization_params(
+                kappa3_kappa1, kappa4_kappa2, μ_B, optimization_params,
+                T_min, T_max, T_step_scan;
+                gsigma=gsigma, gdelta=gdelta, n_nodes=n_nodes, verbose=false)
+            
+            # 检查是否成功找到两个温度
+            if !isnan(T_k3k1) && !isnan(T_k4k2) && isfinite(T_k3k1) && isfinite(T_k4k2)
+                # 计算加权温度差的平方 (转换为MeV单位)
+                temp_diff_MeV = abs(T_k3k1 - T_k4k2) * hc
+                contribution = weight * temp_diff_MeV^2
+                weighted_sum_of_squares += contribution
+                valid_pairs += 1
+                
+                if verbose
+                    println("  ✓ |ΔT| = $(round(temp_diff_MeV, digits=2)) MeV")
+                    println("    加权贡献: $(round(contribution, digits=2)) MeV²")
+                end
+            else
+                # 无法找到有效温度，应用加权惩罚
+                weighted_penalty = weight * penalty_for_missing
+                weighted_sum_of_squares += weighted_penalty
+                failed_pairs += 1
+                
+                if verbose
+                    println("  ✗ 应用加权惩罚: $(round(weighted_penalty, digits=2))")
+                end
+            end
+            
+        catch e
+            # 计算过程出错，应用加权惩罚
+            weighted_penalty = weight * penalty_for_missing
+            weighted_sum_of_squares += weighted_penalty
+            failed_pairs += 1
+            
+            if verbose
+                println("  ✗ 计算失败，应用加权惩罚: $(round(weighted_penalty, digits=2))")
+            end
+        end
+    end
+    
+    if verbose
+        println("\n" * "="^60)
+        println("加权计算完成")
+        println("="^60)
+        println("总组数: $(length(kappa_pairs))")
+        println("成功计算: $valid_pairs")
+        println("失败/无效: $failed_pairs")
+        println("加权温度差平方和: $(round(weighted_sum_of_squares, digits=2)) MeV²")
+    end
+    
+    return weighted_sum_of_squares
+end
+
+function demo_temperature_difference_sum_of_squares()
+    """
+    演示函数：展示如何使用 calculate_temperature_difference_sum_of_squares 函数
+    """
+    
+    println("="^80)
+    println("演示：温度差平方和计算")
+    println("="^80)
+    
+    # 定义测试参数
+    kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]  # 示例κ比值对
+    μ_B = 300.0 / hc  # 300 MeV，转换为无量纲单位
+    optimization_params = (0.15, 16.0, 240.0, 0.7, 32.0)  # (ρ₀, B_A, K, m_ratio, E_sym)
+    T_min = 80.0 / hc   # 80 MeV
+    T_max = 200.0 / hc  # 200 MeV
+    
+    println("测试参数:")
+    println("  κ比值对: $kappa_pairs")
+    println("  μ_B = $(μ_B*hc) MeV")
+    println("  优化参数: $optimization_params")
+    println("  温度范围: $(T_min*hc) - $(T_max*hc) MeV")
+    
+    # 计算温度差平方和
+    println("\n计算温度差平方和...")
+    sum_of_squares = calculate_temperature_difference_sum_of_squares(
+        kappa_pairs, μ_B, optimization_params, T_min, T_max;
+        T_step_scan=2.0/hc, verbose=true, penalty_for_missing=1e4)
+    
+    println("\n最终结果:")
+    println("温度差平方和 = $(round(sum_of_squares, digits=2)) MeV²")
+    
+    # 演示加权版本
+    println("\n" * "="^60)
+    println("演示：加权温度差平方和计算")
+    println("="^60)
+    
+    weights = [1.0, 2.0, 0.5]  # 示例权重
+    println("权重: $weights")
+    
+    weighted_sum = calculate_temperature_difference_sum_of_squares_with_weights(
+        kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+        T_step_scan=2.0/hc, verbose=true, penalty_for_missing=1e4)
+    
+    println("\n最终结果:")
+    println("加权温度差平方和 = $(round(weighted_sum, digits=2)) MeV²")
+    
+    return sum_of_squares, weighted_sum
+end
