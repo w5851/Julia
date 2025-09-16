@@ -5,6 +5,9 @@
 # 使用简单的滑动数组检测和线性插值，无需外部依赖
 
 include("Advanced_ForwardDiff.jl")
+include("Constants_Gas_Liquid.jl")
+using .Constants_Gas_Liquid
+using DataFrames, Statistics, Dates
 
 function find_temperature_for_kappa_ratios(target_kappa3_kappa1, target_kappa4_kappa2, μ_B, 
                                           T_min, T_max, T_step_scan=1.0/hc;
@@ -126,6 +129,266 @@ function find_temperature_for_kappa_ratios(target_kappa3_kappa1, target_kappa4_k
     end
     
     return T_kappa3_kappa1, T_kappa4_kappa2
+end
+
+function find_temperature_for_kappa_ratios_with_optimization_params(
+    target_kappa3_kappa1, target_kappa4_kappa2, μ_B, optimization_params,
+    T_min, T_max, T_step_scan=1.0/hc;
+    gsigma=1.25, gdelta=0.01, n_nodes=256, verbose=true)
+    """
+    通过优化参数计算给定κ₃/κ₁和κ₄/κ₂值对应的温度
+    
+    参数:
+    - target_kappa3_kappa1: 目标κ₃/κ₁值
+    - target_kappa4_kappa2: 目标κ₄/κ₂值
+    - μ_B: 重子化学势
+    - optimization_params: 优化参数元组 (ρ₀, B_A, K, m_ratio, E_sym)
+        * ρ₀: 核饱和密度 (fm⁻³)
+        * B_A: 结合能 (MeV)
+        * K: 不可压缩模量 (MeV)
+        * m_ratio: 有效质量比
+        * E_sym: 对称能 (MeV)
+    - T_min: 温度搜索下限
+    - T_max: 温度搜索上限
+    - T_step_scan: 温度扫描步长
+    - gsigma, gdelta: 强子-夸克耦合参数
+    - n_nodes: 积分节点数
+    - verbose: 是否打印详细信息
+    
+    返回:
+    - (T_kappa3_kappa1, T_kappa4_kappa2): 对应的温度值
+    """
+    
+    # 解包优化参数
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    if verbose
+        println("="^80)
+        println("基于优化参数的温度反向查找")
+        println("="^80)
+        println("优化参数:")
+        println("  ρ₀ = $ρ₀ fm⁻³")
+        println("  B_A = $B_A MeV")
+        println("  K = $K MeV") 
+        println("  m_ratio = $m_ratio")
+        println("  E_sym = $E_sym MeV")
+        println("目标κ比值:")
+        println("  κ₃/κ₁ = $target_kappa3_kappa1")
+        println("  κ₄/κ₂ = $target_kappa4_kappa2")
+        println("  μ_B = $(μ_B*hc) MeV")
+    end
+    
+    # 将优化参数转换为无量纲单位（除以hc）
+    ρ₀_dimensionless = ρ₀
+    B_A_dimensionless = B_A / hc
+    K_dimensionless = K / hc  
+    E_sym_dimensionless = E_sym / hc
+    
+    # 计算耦合常数
+    if verbose
+        println("\n计算耦合常数...")
+    end
+    
+    try
+        fσ, fω, fρ, fδ, b, c = calculate_couplings(
+            ρ₀_dimensionless, B_A_dimensionless, K_dimensionless, m_ratio, E_sym_dimensionless)
+        
+        if verbose
+            println("  耦合常数计算结果:")
+            println("    fσ = $(round(fσ, digits=6))")
+            println("    fω = $(round(fω, digits=6))")
+            println("    fρ = $(round(fρ, digits=6))")
+            println("    fδ = $(round(fδ, digits=6))")
+            println("    b = $(round(b, digits=6))")
+            println("    c = $(round(c, digits=6))")
+        end
+        
+        # 调用原始的温度查找函数
+        T_kappa3_kappa1, T_kappa4_kappa2 = find_temperature_for_kappa_ratios(
+            target_kappa3_kappa1, target_kappa4_kappa2, μ_B, T_min, T_max, T_step_scan;
+            gsigma=gsigma, gdelta=gdelta, fs=fσ, fo=fω, fr=fρ, fd=fδ,
+            b=b, c=c, n_nodes=n_nodes, verbose=verbose)
+        
+        return T_kappa3_kappa1, T_kappa4_kappa2
+        
+    catch e
+        if verbose
+            println("✗ 耦合常数计算失败: $e")
+        end
+        return NaN, NaN
+    end
+end
+
+function batch_find_temperatures_with_optimization_params(
+    kappa_pairs, μ_B, optimization_params, T_min, T_max;
+    T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
+    output_file="output/Gas_Liquid/temperature_optimization_results.csv")
+    """
+    批量计算多组κ比值在给定优化参数下对应的温度
+    
+    参数:
+    - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...]
+    - μ_B: 重子化学势
+    - optimization_params: 优化参数元组 (ρ₀, B_A, K, m_ratio, E_sym)
+    - T_min, T_max: 温度搜索范围
+    - T_step_scan: 扫描步长
+    - output_file: 输出文件路径
+    - 其他参数: 模型参数
+    
+    返回:
+    - DataFrame: 包含所有结果的数据框
+    """
+    
+    # 解包优化参数
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    println("="^80)
+    println("基于优化参数的批量温度查找")
+    println("="^80)
+    println("优化参数: ρ₀=$ρ₀, B_A=$B_A MeV, K=$K MeV, m_ratio=$m_ratio, E_sym=$E_sym MeV")
+    println("μ_B = $(μ_B*hc) MeV，共 $(length(kappa_pairs)) 组κ比值")
+    println("温度搜索范围: $(T_min*hc) - $(T_max*hc) MeV")
+    
+    results = []
+    
+    for (i, (kappa3_kappa1, kappa4_kappa2)) in enumerate(kappa_pairs)
+        println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2")
+        
+        try
+            T_k3k1, T_k4k2 = find_temperature_for_kappa_ratios_with_optimization_params(
+                kappa3_kappa1, kappa4_kappa2, μ_B, optimization_params,
+                T_min, T_max, T_step_scan;
+                gsigma=gsigma, gdelta=gdelta, n_nodes=n_nodes, verbose=false)
+            
+            result_row = (
+                kappa3_over_kappa1_target = kappa3_kappa1,
+                kappa4_over_kappa2_target = kappa4_kappa2,
+                T_for_kappa3_kappa1_MeV = isnan(T_k3k1) ? NaN : T_k3k1 * hc,
+                T_for_kappa4_kappa2_MeV = isnan(T_k4k2) ? NaN : T_k4k2 * hc,
+                temperature_difference_MeV = isnan(T_k3k1) || isnan(T_k4k2) ? NaN : abs(T_k3k1 - T_k4k2) * hc,
+                mu_B_MeV = μ_B * hc,
+                rho0 = ρ₀,
+                B_A_MeV = B_A,
+                K_MeV = K,
+                m_ratio = m_ratio,
+                E_sym_MeV = E_sym,
+                status_kappa3_kappa1 = isnan(T_k3k1) ? "未找到" : "找到",
+                status_kappa4_kappa2 = isnan(T_k4k2) ? "未找到" : "找到"
+            )
+            
+            push!(results, result_row)
+            
+            temp_diff = isnan(T_k3k1) || isnan(T_k4k2) ? "N/A" : round(abs(T_k3k1 - T_k4k2) * hc, digits=2)
+            println("  结果: T(κ₃/κ₁) = $(isnan(T_k3k1) ? "未找到" : round(T_k3k1*hc, digits=2))" * 
+                   " MeV, T(κ₄/κ₂) = $(isnan(T_k4k2) ? "未找到" : round(T_k4k2*hc, digits=2)) MeV" *
+                   ", |ΔT| = $temp_diff MeV")
+            
+        catch e
+            println("  计算失败: $e")
+            
+            result_row = (
+                kappa3_over_kappa1_target = kappa3_kappa1,
+                kappa4_over_kappa2_target = kappa4_kappa2,
+                T_for_kappa3_kappa1_MeV = NaN,
+                T_for_kappa4_kappa2_MeV = NaN,
+                temperature_difference_MeV = NaN,
+                mu_B_MeV = μ_B * hc,
+                rho0 = ρ₀,
+                B_A_MeV = B_A,
+                K_MeV = K,
+                m_ratio = m_ratio,
+                E_sym_MeV = E_sym,
+                status_kappa3_kappa1 = "计算失败",
+                status_kappa4_kappa2 = "计算失败"
+            )
+            
+            push!(results, result_row)
+        end
+    end
+    
+    # 保存结果
+    save_optimization_temperature_results(results, optimization_params, μ_B, T_min, T_max, 
+                                        T_step_scan, output_file, gsigma, gdelta, n_nodes)
+    
+    return DataFrame(results)
+end
+
+function save_optimization_temperature_results(results, optimization_params, μ_B, T_min, T_max, 
+                                             T_step_scan, output_file, gsigma, gdelta, n_nodes)
+    """
+    保存基于优化参数的温度查找结果到CSV文件
+    """
+    println("\n" * "="^60)
+    println("保存优化参数温度查找结果")
+    println("="^60)
+    
+    df = DataFrame(results)
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    # 确保输出目录存在
+    output_dir = dirname(output_file)
+    if !isdir(output_dir)
+        mkpath(output_dir)
+    end
+    
+    try
+        open(output_file, "w") do io
+            # 写入元数据头部
+            println(io, "# Temperature Finder Results with Optimization Parameters")
+            println(io, "# Generated on: $(Dates.now())")
+            println(io, "# Optimization Parameters:")
+            println(io, "# rho0 = $ρ₀ fm^-3")
+            println(io, "# B_A = $B_A MeV")
+            println(io, "# K = $K MeV")
+            println(io, "# m_ratio = $m_ratio")
+            println(io, "# E_sym = $E_sym MeV")
+            println(io, "# Physical Parameters:")
+            println(io, "# gsigma = $gsigma")
+            println(io, "# gdelta = $gdelta")
+            println(io, "# mu_B = $(μ_B*hc) MeV")
+            println(io, "# T_search_range = $(T_min*hc) - $(T_max*hc) MeV")
+            println(io, "# T_scan_step = $(T_step_scan*hc) MeV")
+            println(io, "# nodes = $n_nodes")
+            println(io, "#")
+            
+            # 写入CSV数据
+            col_names = names(df)
+            println(io, join(col_names, ","))
+            
+            for row in eachrow(df)
+                values = [string(row[col]) for col in col_names]
+                println(io, join(values, ","))
+            end
+        end
+        
+        println("✓ 结果已保存到: $output_file")
+        
+        # 显示统计信息
+        successful_k3k1 = sum(df.status_kappa3_kappa1 .== "找到")
+        successful_k4k2 = sum(df.status_kappa4_kappa2 .== "找到")
+        both_successful = sum((df.status_kappa3_kappa1 .== "找到") .& (df.status_kappa4_kappa2 .== "找到"))
+        total = nrow(df)
+        
+        println("\n统计信息:")
+        println("总计算组数: $total")
+        println("κ₃/κ₁ 成功找到温度: $successful_k3k1/$total")
+        println("κ₄/κ₂ 成功找到温度: $successful_k4k2/$total")
+        println("两个κ比值都找到温度: $both_successful/$total")
+        
+        if both_successful > 0
+            valid_diffs = filter(!isnan, df.temperature_difference_MeV)
+            if !isempty(valid_diffs)
+                println("温度差统计 (|T_κ₃/κ₁ - T_κ₄/κ₂|):")
+                println("  平均值: $(round(mean(valid_diffs), digits=2)) MeV")
+                println("  中位数: $(round(median(valid_diffs), digits=2)) MeV")
+                println("  最小值: $(round(minimum(valid_diffs), digits=2)) MeV")
+                println("  最大值: $(round(maximum(valid_diffs), digits=2)) MeV")
+            end
+        end
+        
+    catch e
+        println("✗ 保存文件失败: $e")
+    end
 end
 
 function find_temperature_for_single_kappa_ratio(T_array, kappa_array, target_kappa, kappa_name, verbose=true)
