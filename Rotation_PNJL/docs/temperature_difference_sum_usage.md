@@ -17,34 +17,32 @@ calculate_temperature_difference_sum_of_squares(
     penalty_for_missing=1e6, verbose=false)
 ```
 
-#### 参数说明
-- `kappa_pairs`: κ比值对数组，格式 `[(κ₃/κ₁, κ₄/κ₂), ...]`
-- `μ_B`: 重子化学势（无量纲单位）
-- `optimization_params`: 优化参数元组 `(ρ₀, B_A, K, m_ratio, E_sym)`
-- `T_min, T_max`: 温度搜索范围（无量纲单位）
-- `penalty_for_missing`: 计算失败时的惩罚值（默认1e6）
-- `verbose`: 是否显示详细信息（优化时建议设为false）
-
-#### 返回值
-- `sum_of_squares`: 所有组温度差平方和（MeV²单位）
-
 ### 2. `calculate_temperature_difference_sum_of_squares_with_weights`
 
 计算加权温度差平方和，允许为不同的κ比值对分配不同权重。
 
+### 3. `create_temperature_difference_objective` ⭐ **推荐用于优化**
+
+创建温度差平方和目标函数的闭包，将实验确定的参数封装起来，返回只需要优化参数作为输入的函数。
+
 #### 函数签名
 ```julia
-calculate_temperature_difference_sum_of_squares_with_weights(
-    kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+create_temperature_difference_objective(
+    kappa_pairs, μ_B, T_min, T_max;
     T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
     penalty_for_missing=1e6, verbose=false)
 ```
 
-#### 新增参数
-- `weights`: 权重数组，与 `kappa_pairs` 长度相同
+#### 返回值
+- `objective_function`: 闭包函数，签名为 `f(optimization_params) -> Float64`
+
+### 4. `create_weighted_temperature_difference_objective`
+
+创建加权版本的目标函数闭包。
 
 ## 使用示例
 
+### 基本使用
 ```julia
 # 包含模块
 include("src/Gas_Liquid/Advanced_FindTforDiff.jl")
@@ -55,28 +53,90 @@ kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
 optimization_params = (0.15, 16.0, 240.0, 0.7, 32.0)  # (ρ₀, B_A, K, m_ratio, E_sym)
 T_min, T_max = 80.0/hc, 200.0/hc  # 80-200 MeV
 
-# 计算温度差平方和
+# 直接计算温度差平方和
 sum_sq = calculate_temperature_difference_sum_of_squares(
     kappa_pairs, μ_B, optimization_params, T_min, T_max,
     verbose=false)
 
 println("温度差平方和: $sum_sq MeV²")
+```
 
+### 推荐用法：使用闭包函数 ⭐
+
+```julia
+# 实验确定的参数（固定）
+kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
+μ_B = 300.0 / hc  # 300 MeV
+T_min, T_max = 80.0/hc, 200.0/hc  # 80-200 MeV
+
+# 创建目标函数闭包
+objective_func = create_temperature_difference_objective(
+    kappa_pairs, μ_B, T_min, T_max; 
+    verbose=false, penalty_for_missing=1e6)
+
+# 现在目标函数只需要优化参数输入
+optimization_params = (0.15, 16.0, 240.0, 0.7, 32.0)
+result = objective_func(optimization_params)
+
+println("目标函数值: $result MeV²")
+
+# 可以直接用于优化算法
+using Optim
+initial_params = [0.15, 16.0, 240.0, 0.7, 32.0]
+result = optimize(params -> objective_func(tuple(params...)), initial_params)
+```
+
+### 加权版本使用
+```julia
 # 使用权重版本
 weights = [1.0, 2.0, 0.5]
-weighted_sum_sq = calculate_temperature_difference_sum_of_squares_with_weights(
-    kappa_pairs, weights, μ_B, optimization_params, T_min, T_max,
-    verbose=false)
+weighted_objective_func = create_weighted_temperature_difference_objective(
+    kappa_pairs, weights, μ_B, T_min, T_max; verbose=false)
 
-println("加权温度差平方和: $weighted_sum_sq MeV²")
+weighted_result = weighted_objective_func(optimization_params)
+println("加权目标函数值: $weighted_result MeV²")
 ```
 
 ## 运行演示
 
 ```julia
-# 运行内置演示函数
+# 运行基本演示函数
 demo_temperature_difference_sum_of_squares()
+
+# 运行闭包演示函数 ⭐ 推荐
+demo_objective_function_closure()
 ```
+
+## 闭包函数的优势
+
+### 1. **简化优化接口**
+```julia
+# 传统方式：需要传递多个固定参数
+function objective(params)
+    return calculate_temperature_difference_sum_of_squares(
+        kappa_pairs, μ_B, params, T_min, T_max; verbose=false)
+end
+
+# 闭包方式：一次设置，重复使用
+objective_func = create_temperature_difference_objective(
+    kappa_pairs, μ_B, T_min, T_max; verbose=false)
+# 现在 objective_func 只需要 optimization_params
+```
+
+### 2. **与优化库完美集成**
+```julia
+using Optim, NLopt
+
+# 直接用于Optim.jl
+result = optimize(objective_func, initial_guess)
+
+# 直接用于NLopt.jl
+opt = Opt(:LN_NELDERMEAD, 5)  # 5个优化参数
+opt.min_objective = (params, grad) -> objective_func(params)
+```
+
+### 3. **参数验证和错误处理**
+闭包在创建时验证参数有效性，避免运行时错误。
 
 ## 错误处理
 
