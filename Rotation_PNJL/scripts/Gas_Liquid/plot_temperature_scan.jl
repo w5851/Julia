@@ -325,7 +325,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
 elseif isinteractive() && length(ARGS) == 0
     println("检测到REPL环境，自动执行main()...")
     println("如果不希望自动执行，请使用: include(\"plot_temperature_scan.jl\"); # 然后手动调用main()")
-    main("../../output/Gas_Liquid/forwarddiff_optimization_params_scan.csv")
+    #main("../../output/Gas_Liquid/forwarddiff_optimization_params_scan.csv")
+    main("../../output/Gas_Liquid/forwarddiff_temperature_scan.csv")
+    
 else
     println("脚本已加载。请手动调用 main() 或 main(\"csv文件路径\") 来绘制图形。")
     println("示例:")

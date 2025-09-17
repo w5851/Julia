@@ -43,12 +43,12 @@ try
     df_results = forwarddiff_temperature_scan(
         μ_B_fixed, T_min, T_max, T_step, output_file;
         gsigma=1.25, gdelta=0.01,      # 场初值
-        fs=17.28476,                    # σ耦合
-        fo=11.66174,                    # ω耦合
-        fr=0.89363,                     # ρ耦合
+        fs=15.0,                    # σ耦合
+        fo=5.423,                    # ω耦合
+        fr=0.95,                     # ρ耦合
         fd=0.0,                        # δ耦合
-        b=0.00210,                     # 三阶耦合
-        c=-0.00297,                    # 四阶耦合
+        b=0.00692,                     # 三阶耦合
+        c=-0.0048,                    # 四阶耦合
         n_nodes=256                    # 积分节点数
     )
     

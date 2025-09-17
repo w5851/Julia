@@ -13,6 +13,9 @@ using Dates
 using CSV
 using DataFrames
 
+# 导入必要的函数用于高斯过程更新
+import GaussianProcesses: update!, initialise_model!
+
 """
 优化参数结构体，定义五个PNJL模型参数
 """
@@ -844,7 +847,7 @@ function demo_bayesian_optimization_with_warmup()
         697.0 / hc    # 第3组对应697 MeV
     ]
     
-    T_min, T_max = 25.0/hc, 200.0/hc
+    T_min, T_max = 70.0/hc, 120.0/hc
     
     # 设置参数边界（请根据物理约束调整）
     lower_bounds = [0.145, -17.0, 212.0, 0.55, 26.1]   # [ρ₀, B_A, K, m_ratio, E_sym]
@@ -861,7 +864,7 @@ function demo_bayesian_optimization_with_warmup()
         kappa_pairs, μ_B_values, T_min, T_max, lower_bounds, upper_bounds;
         maxiterations=50,              # 减少迭代次数
         initial_samples=10,             # 减少初始样本
-        T_step_scan=3.0/hc,           # 使用更粗的扫描步长
+        T_step_scan=2.0/hc,           # 使用更粗的扫描步长
         acquisition_function=:expected_improvement,
         model_optimization_frequency=3, # 减少模型优化频率
         penalty_for_missing=1e4,       # 降低惩罚值
@@ -900,8 +903,9 @@ function demo_simple_bayesian_optimization_with_warmup()
     
     # 使用更少的实验数据进行快速测试
     kappa_pairs = [
-        (1.09, -0.29),    # 简化的第1组
-        (1.06, 0.16)      # 简化的第2组
+        (1.09031788496341, -0.28904867673079),   # 第1组
+        (1.06152332992368, 0.164279260625683),   # 第2组  
+        (1.11111023684003, 0.224522832511389)    # 第3组
     ]
     
     μ_B_values = [
@@ -965,7 +969,11 @@ function quick_test_objective()
     println("="^60)
     
     # 测试数据
-    kappa_pairs = [(1.09, -0.29), (1.06, 0.16)]
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),   # 第1组
+        (1.06152332992368, 0.164279260625683),   # 第2组  
+        (1.11111023684003, 0.224522832511389)    # 第3组
+    ]
     μ_B_values = [632.0/hc, 666.0/hc]
     T_min, T_max = 50.0/hc, 150.0/hc
     
@@ -1004,7 +1012,11 @@ function test_warmup_only()
     println("="^80)
     
     # 测试数据
-    kappa_pairs = [(1.09, -0.29)]  # 只用一组数据
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),   # 第1组
+        (1.06152332992368, 0.164279260625683),   # 第2组  
+        (1.11111023684003, 0.224522832511389)    # 第3组
+    ]  # 只用一组数据
     μ_B_values = [632.0/hc]
     T_min, T_max = 60.0/hc, 100.0/hc  # 很小的温度范围
     
@@ -1040,7 +1052,11 @@ function quick_warmup_optimization()
     println("="^80)
     
     # 使用最简配置
-    kappa_pairs = [(1.09, -0.29)]
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),   # 第1组
+        (1.06152332992368, 0.164279260625683),   # 第2组  
+        (1.11111023684003, 0.224522832511389)    # 第3组
+    ]
     μ_B_values = [632.0/hc]
     T_min, T_max = 80.0/hc, 120.0/hc  # 很窄的温度范围
     lower_bounds = [0.14, -17.0, 235.0, 0.68, 31.0]
@@ -1092,7 +1108,7 @@ function load_previous_optimization_results(csv_file::String)
     
     if !isfile(csv_file)
         println("⚠️  未找到文件 $(csv_file)，将从头开始优化")
-        return nothing, nothing, nothing
+        return nothing, nothing, nothing, nothing
     end
     
     try
@@ -1154,7 +1170,7 @@ function setup_bayesian_optimizer_with_prior_data(
     model = ElasticGPE(
         n_dims,
         mean = MeanConst(0.),
-        kernel = SEArd(log(ones(n_dims)), log(1.0)),
+        kernel = SEArd(ones(n_dims), 0.0),  # 与原始函数保持一致
         logNoise = log(0.01),
         capacity = 3000
     )
@@ -1193,9 +1209,9 @@ function setup_bayesian_optimizer_with_prior_data(
     # 设置采集函数优化选项
     acquisition_options = (
         method = :LD_LBFGS,
-        restarts = 5,
-        maxtime = 1.0,
-        maxeval = 200,
+        restarts = 10,
+        maxtime = 30.0,
+        maxeval = 10000,
         xtol_abs = 1e-7,
         ftol_abs = 1e-9
     )
@@ -1225,25 +1241,48 @@ function setup_bayesian_optimizer_with_prior_data(
             error("先验数据维度 $(size(X_prior, 2)) 与参数维度 $n_dims 不匹配")
         end
         
-        # 逐个添加先验观测点
+        # 过滤并准备有效的先验数据
+        valid_X = Float64[]
+        valid_y = Float64[]
+        valid_count = 0
+        
         for i in 1:size(X_prior, 1)
             x_point = X_prior[i, :]
             y_point = y_prior[i]
             
-            # 验证点在边界内
-            if all(lower_bounds .<= x_point .<= upper_bounds) && isfinite(y_point)
-                try
-                    # 手动添加观测点到高斯过程
-                    update!(optimizer.model, reshape(x_point, :, 1), [y_point])
-                catch e
-                    println("⚠️  添加先验点 $i 失败: $e")
+            # 验证点在边界内且有效
+            if all(lower_bounds .<= x_point .<= upper_bounds) && isfinite(y_point) && y_point > 0
+                if valid_count == 0
+                    valid_X = reshape(x_point, 1, :)
+                    valid_y = [y_point]
+                else
+                    valid_X = vcat(valid_X, reshape(x_point, 1, :))
+                    push!(valid_y, y_point)
                 end
-            else
-                println("⚠️  跳过超出边界或无效的先验点 $i")
+                valid_count += 1
             end
         end
         
-        println("✅ 成功添加先验数据到贝叶斯优化器")
+        if valid_count > 0
+            println("✅ 筛选出 $valid_count 个有效的先验数据点")
+            
+            # 通过直接初始化模型来使用先验数据
+            try
+                # 准备数据格式用于高斯过程初始化
+                GP_X = valid_X'  # 转置为 n_dims × n_points 格式
+                GP_y = valid_y
+                
+                # 初始化高斯过程模型（这会替换空模型）
+                initialise_model!(optimizer.model; GP_X=GP_X, GP_y=GP_y)
+                
+                println("✅ 成功使用 $valid_count 个先验观测点初始化模型")
+            catch e
+                println("⚠️  添加先验数据失败: $e")
+                println("将不使用先验数据，从头开始优化")
+            end
+        else
+            println("⚠️  没有找到有效的先验数据点")
+        end
     end
     
     println("✅ 带先验数据的贝叶斯优化器创建完成")
@@ -1374,9 +1413,9 @@ function demo_continue_optimization()
     
     # 实验数据配置
     kappa_pairs = [
-        (1.09, -0.29),
-        (1.06, 0.16),
-        (1.03, 0.30)
+        (1.09031788496341, -0.28904867673079),   # 第1组
+        (1.06152332992368, 0.164279260625683),   # 第2组  
+        (1.11111023684003, 0.224522832511389)    # 第3组
     ]
     
     μ_B_values = [
@@ -1417,4 +1456,563 @@ function demo_continue_optimization()
     end
     
     return result
+end
+
+# =============================================================================
+# 简化版贝叶斯优化接口 - 仿照用户提供的简洁风格
+# =============================================================================
+
+"""
+简化版贝叶斯优化 - 带先验数据支持
+
+仿照 BayesianOptimization.jl 的简洁风格，专为 PNJL 模型参数优化设计。
+支持从先验数据开始优化，减少不必要的复杂性。
+"""
+
+function create_pnjl_objective(kappa_pairs, μ_B_values, T_min, T_max; 
+                              T_step=1.0/hc, penalty=1e6)
+    """
+    创建PNJL模型参数优化目标函数
+    
+    参数:
+    - kappa_pairs: κ比值对 [(κ₃/κ₁, κ₄/κ₂), ...]
+    - μ_B_values: 重子化学势数组 [μ_B1, μ_B2, ...]  
+    - T_min, T_max: 温度搜索范围
+    - T_step: 温度扫描步长
+    - penalty: 计算失败惩罚值
+    
+    返回:
+    - objective: 目标函数 f(x) where x = [ρ₀, B_A, K, m_ratio, E_sym]
+    """
+    
+    # 创建基础闭包函数
+    base_func = create_temperature_difference_objective(
+        kappa_pairs, μ_B_values, T_min, T_max;
+        T_step_scan=T_step, penalty_for_missing=penalty, verbose=false)
+    
+    # 包装为向量输入格式
+    function objective(x::Vector{Float64})
+        try
+            params = (x[1], x[2], x[3], x[4], x[5])  # ρ₀, B_A, K, m_ratio, E_sym
+            result = base_func(params)
+            return isfinite(result) ? result : penalty
+        catch
+            return penalty
+        end
+    end
+    
+    return objective
+end
+
+function optimize_with_prior!(gp, bounds, method; max_iterations=15, verbosity=2)
+    """
+    使用已有高斯过程模型进行贝叶斯优化
+    
+    参数:
+    - gp: 已拟合的高斯过程模型
+    - bounds: 参数边界 [(min1, max1), (min2, max2), ...]
+    - method: 采集函数方法 (如 EI())
+    - max_iterations: 最大迭代次数
+    - verbosity: 输出详细程度
+    
+    返回:
+    - result: 优化结果
+    """
+    
+    # 将 GP 包装为 BayesianOptimization 模型
+    model = GaussianProcessModel(gp)
+    objective = BayesianOptimization.Objective(model=model, sense=MinSense)
+    
+    # 运行优化
+    result = optimize(objective, bounds, method, max_iterations=max_iterations, verbosity=verbosity)
+    
+    return result
+end
+
+function bayesian_optimize_pnjl_simple(kappa_pairs, μ_B_values, T_min, T_max, bounds;
+                                      prior_X=nothing, prior_y=nothing,
+                                      max_iterations=15, T_step=1.0/hc,
+                                      kernel_params=(0.0, 0.0), verbosity=2)
+    """
+    简化的PNJL模型贝叶斯优化接口
+    
+    参数:
+    - kappa_pairs: κ比值对数组
+    - μ_B_values: 重子化学势数组
+    - T_min, T_max: 温度范围
+    - bounds: 参数边界 [(min1, max1), (min2, max2), ...]
+    - prior_X: 先验观测点 [[x1, x2, x3, x4, x5], ...]
+    - prior_y: 先验目标值 [y1, y2, ...]
+    - max_iterations: 优化迭代次数
+    - T_step: 温度扫描步长
+    - kernel_params: 核函数初始参数
+    - verbosity: 输出详细程度
+    
+    返回:
+    - result: 优化结果
+    """
+    
+    println("="^60)
+    println("PNJL模型贝叶斯优化 (简化版)")
+    println("="^60)
+    
+    # 1. 创建目标函数
+    objective = create_pnjl_objective(kappa_pairs, μ_B_values, T_min, T_max; 
+                                    T_step=T_step, penalty=1e6)
+    
+    # 2. 设置高斯过程
+    n_dims = length(bounds)
+    mean = MeanZero()
+    kernel = SE(kernel_params[1], kernel_params[2])  # 平方指数核
+    
+    # 3. 创建和拟合高斯过程模型
+    if prior_X !== nothing && prior_y !== nothing
+        println("使用 $(length(prior_y)) 个先验数据点")
+        
+        # 转换数据格式
+        X_matrix = hcat(prior_X...)  # 转为矩阵格式，每列一个样本
+        y_vector = map(y -> objective([y...]), eachcol(X_matrix))  # 重新计算以确保一致性
+        
+        # 创建并拟合高斯过程
+        gp = GP(X_matrix, y_vector, mean, kernel)
+        optimize!(gp)  # 优化超参数
+        
+    else
+        println("从头开始优化（无先验数据）")
+        
+        # 生成初始样本点
+        n_initial = 5
+        X_initial = []
+        for i in 1:n_initial
+            x = [bounds[j][1] + (bounds[j][2] - bounds[j][1]) * rand() for j in 1:n_dims]
+            push!(X_initial, x)
+        end
+        
+        X_matrix = hcat(X_initial...)
+        y_vector = map(x -> objective(x), X_initial)
+        
+        # 创建并拟合高斯过程
+        gp = GP(X_matrix, y_vector, mean, kernel)
+        optimize!(gp)
+    end
+    
+    # 4. 设置优化方法
+    model = GaussianProcessModel(gp)
+    objective_wrapped = BayesianOptimization.Objective(model=model, sense=MinSense)
+    method = BayesianOptimization.EI()  # 期望提升
+    
+    # 5. 运行优化
+    println("开始贝叶斯优化，最大迭代: $max_iterations")
+    result = optimize(objective_wrapped, bounds, method, 
+                     max_iterations=max_iterations, verbosity=verbosity)
+    
+    # 6. 输出结果
+    println("\n" * "="^50)
+    println("优化完成!")
+    println("="^50)
+    best_params = result.model_args.X[:, end]
+    best_value = result.model_args.y[end]
+    
+    param_names = ["ρ₀", "B_A", "K", "m_ratio", "E_sym"]
+    println("最佳参数:")
+    for i in 1:length(param_names)
+        println("  $(param_names[i]) = $(round(best_params[i], digits=6))")
+    end
+    println("最佳目标值: $(round(best_value, digits=4))")
+    
+    return result
+end
+
+function demo_simple_bayesian_optimization()
+    """
+    演示简化版贝叶斯优化的使用
+    """
+    
+    println("="^80)
+    println("演示：简化版PNJL贝叶斯优化")
+    println("="^80)
+    
+    # 实验数据
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),
+        (1.06152332992368, 0.164279260625683),
+        (1.11111023684003, 0.224522832511389)
+    ]
+    
+    μ_B_values = [632.0/hc, 666.0/hc, 697.0/hc]
+    T_min, T_max = 50.0/hc, 150.0/hc
+    
+    # 参数边界
+    bounds = [
+        (0.145, 0.170),   # ρ₀
+        (-17.0, -15.6),   # B_A  
+        (212.0, 401.0),   # K
+        (0.55, 0.75),     # m_ratio
+        (26.1, 44.0)      # E_sym
+    ]
+    
+    # 示例：创建一些先验数据
+    prior_X = [
+        [0.155, -16.2, 250.0, 0.65, 32.0],
+        [0.160, -16.5, 280.0, 0.68, 35.0],
+        [0.150, -16.0, 230.0, 0.62, 30.0]
+    ]
+    
+    println("使用先验数据的优化:")
+    # 先计算先验点的目标函数值
+    objective = create_pnjl_objective(kappa_pairs, μ_B_values, T_min, T_max; T_step=5.0/hc)
+    prior_y = [objective(x) for x in prior_X]
+    
+    println("先验数据点:")
+    for (i, (x, y)) in enumerate(zip(prior_X, prior_y))
+        println("  点 $i: $(round.(x, digits=3)) → $(round(y, digits=2))")
+    end
+    
+    # 执行优化
+    result = bayesian_optimize_pnjl_simple(
+        kappa_pairs, μ_B_values, T_min, T_max, bounds;
+        prior_X=prior_X, prior_y=prior_y,
+        max_iterations=10, T_step=5.0/hc, verbosity=1
+    )
+    
+    println("\n✅ 简化版贝叶斯优化演示完成!")
+    println("对比复杂版本，这个实现:")
+    println("  - 代码更简洁，易于理解")
+    println("  - 支持先验数据")
+    println("  - 减少了不必要的功能")
+    println("  - 保持了核心优化能力")
+    
+    return result
+end
+
+function load_prior_data_from_csv(csv_file::String)
+    """
+    从CSV文件加载先验数据
+    
+    参数:
+    - csv_file: CSV文件路径
+    
+    返回:
+    - (prior_X, prior_y): 先验观测点和目标值，如果失败返回(nothing, nothing)
+    """
+    
+    if !isfile(csv_file)
+        println("⚠️  未找到文件: $csv_file")
+        return nothing, nothing
+    end
+    
+    try
+        df = CSV.read(csv_file, DataFrame)
+        
+        # 提取参数列
+        param_cols = [:rho0, :B_A, :K, :m_ratio, :E_sym]
+        if !all(col in names(df) for col in param_cols)
+            println("❌ CSV文件缺少必要的参数列")
+            return nothing, nothing
+        end
+        
+        prior_X = []
+        prior_y = Float64[]
+        
+        for row in eachrow(df)
+            x = [row[col] for col in param_cols]
+            y = abs(row.objective_value)  # 确保为正值
+            
+            if isfinite(y) && y > 0
+                push!(prior_X, x)
+                push!(prior_y, y)
+            end
+        end
+        
+        if length(prior_X) > 0
+            println("✅ 从 $csv_file 加载了 $(length(prior_X)) 个有效数据点")
+            return prior_X, prior_y
+        else
+            println("⚠️  CSV文件中没有有效的数据点")
+            return nothing, nothing
+        end
+        
+    catch e
+        println("❌ 读取CSV文件失败: $e")
+        return nothing, nothing
+    end
+end
+
+function bayesian_optimize_from_csv(csv_file::String, kappa_pairs, μ_B_values, T_min, T_max, bounds;
+                                   max_iterations=15, T_step=1.0/hc, verbosity=2)
+    """
+    从CSV文件加载先验数据并继续贝叶斯优化
+    
+    参数:
+    - csv_file: 包含先验数据的CSV文件
+    - 其他参数与 bayesian_optimize_pnjl_simple 相同
+    
+    返回:
+    - result: 优化结果
+    """
+    
+    println("="^80)
+    println("从CSV文件继续贝叶斯优化 (简化版)")
+    println("="^80)
+    println("CSV文件: $csv_file")
+    
+    # 加载先验数据
+    prior_X, prior_y = load_prior_data_from_csv(csv_file)
+    
+    # 执行优化
+    result = bayesian_optimize_pnjl_simple(
+        kappa_pairs, μ_B_values, T_min, T_max, bounds;
+        prior_X=prior_X, prior_y=prior_y,
+        max_iterations=max_iterations, T_step=T_step, verbosity=verbosity
+    )
+    
+    return result
+end
+
+function demo_bayesian_with_csv()
+    """
+    演示从CSV文件加载先验数据的贝叶斯优化
+    """
+    
+    println("="^80)
+    println("演示：从CSV文件加载先验数据的贝叶斯优化")
+    println("="^80)
+    
+    # 实验数据
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),
+        (1.06152332992368, 0.164279260625683)
+    ]
+    
+    μ_B_values = [632.0/hc, 666.0/hc]
+    T_min, T_max = 50.0/hc, 150.0/hc
+    
+    # 参数边界
+    bounds = [
+        (0.145, 0.170),   # ρ₀
+        (-17.0, -15.6),   # B_A  
+        (212.0, 401.0),   # K
+        (0.55, 0.75),     # m_ratio
+        (26.1, 44.0)      # E_sym
+    ]
+    
+    # 尝试从现有CSV文件加载数据
+    csv_file = "Rotation_PNJL/output/Gas_Liquid/demo_bayesian_optimization_warmup.csv"
+    
+    result = bayesian_optimize_from_csv(
+        csv_file, kappa_pairs, μ_B_values, T_min, T_max, bounds;
+        max_iterations=10, T_step=5.0/hc, verbosity=1
+    )
+    
+    println("\n✅ 从CSV加载的贝叶斯优化演示完成!")
+    
+    return result
+end
+
+# =============================================================================
+# 简化版使用指南和总结
+# =============================================================================
+
+"""
+# 简化版贝叶斯优化使用指南
+
+## 主要改进
+
+相比原来臃肿的实现，新的简化版本提供了：
+
+1. **简洁的API** - 仿照 BayesianOptimization.jl 的风格
+2. **先验数据支持** - 可以从已有数据继续优化  
+3. **减少复杂性** - 去除了预热、详细日志等非核心功能
+4. **保持向后兼容** - 原有复杂函数仍然可用
+
+## 核心函数
+
+### 1. 基础优化
+```julia
+result = bayesian_optimize_pnjl_simple(
+    kappa_pairs, μ_B_values, T_min, T_max, bounds;
+    max_iterations=15, T_step=1.0/hc, verbosity=2
+)
+```
+
+### 2. 使用先验数据
+```julia
+prior_X = [[0.155, -16.2, 250.0, 0.65, 32.0], ...]
+prior_y = [125.3, 143.7, ...]
+
+result = bayesian_optimize_pnjl_simple(
+    kappa_pairs, μ_B_values, T_min, T_max, bounds;
+    prior_X=prior_X, prior_y=prior_y,
+    max_iterations=15
+)
+```
+
+### 3. 从CSV文件继续优化
+```julia
+result = bayesian_optimize_from_csv(
+    "previous_results.csv", 
+    kappa_pairs, μ_B_values, T_min, T_max, bounds;
+    max_iterations=15
+)
+```
+
+## 参数说明
+
+- `kappa_pairs`: κ比值对 [(κ₃/κ₁, κ₄/κ₂), ...]
+- `μ_B_values`: 重子化学势数组（以 1/hc 为单位）
+- `T_min, T_max`: 温度搜索范围（以 1/hc 为单位）
+- `bounds`: 参数边界 [(min1,max1), (min2,max2), ...]，顺序为 [ρ₀, B_A, K, m_ratio, E_sym]
+- `prior_X`: 先验观测点列表 [[x1,x2,x3,x4,x5], ...]
+- `prior_y`: 先验目标值列表 [y1, y2, ...]
+- `max_iterations`: 优化迭代次数
+- `T_step`: 温度扫描步长
+- `verbosity`: 输出详细程度 (0=静默, 1=基本, 2=详细)
+
+## 演示函数
+
+- `demo_simple_bayesian_optimization()` - 基础演示
+- `demo_bayesian_with_csv()` - CSV文件演示
+
+## 与原有代码的关系
+
+简化版本位于文件末尾，不影响原有复杂功能。你可以：
+- 使用简化版进行快速开发和测试
+- 需要高级功能时继续使用原有函数
+- 逐步迁移到简化版本
+
+## 使用建议
+
+1. 新项目优先使用简化版本
+2. 先用少量迭代测试，确认目标函数正常工作
+3. 有先验数据时一定要使用，可以显著提高效率
+4. 调整 T_step 平衡计算速度和精度
+"""
+
+function usage_example_simplified()
+    """
+    简化版贝叶斯优化的完整使用示例
+    """
+    
+    println("="^80)
+    println("简化版贝叶斯优化完整使用示例")
+    println("="^80)
+    
+    # 1. 定义实验数据
+    kappa_pairs = [
+        (1.09031788496341, -0.28904867673079),
+        (1.06152332992368, 0.164279260625683)
+    ]
+    μ_B_values = [632.0/hc, 666.0/hc]
+    T_min, T_max = 60.0/hc, 140.0/hc
+    
+    # 2. 定义参数边界
+    bounds = [
+        (0.150, 0.165),   # ρ₀ (fm⁻³)
+        (-16.8, -16.0),   # B_A (MeV)  
+        (230.0, 280.0),   # K (MeV)
+        (0.60, 0.70),     # m_ratio
+        (30.0, 36.0)      # E_sym (MeV)
+    ]
+    
+    println("步骤 1: 从头开始优化（无先验数据）")
+    result1 = bayesian_optimize_pnjl_simple(
+        kappa_pairs, μ_B_values, T_min, T_max, bounds;
+        max_iterations=8, T_step=8.0/hc, verbosity=1
+    )
+    
+    # 3. 模拟从第一次优化中提取先验数据
+    println("\n步骤 2: 使用先验数据继续优化")
+    
+    # 提取前几个最好的点作为先验数据
+    all_X = [result1.model_args.X[:, i] for i in 1:size(result1.model_args.X, 2)]
+    all_y = result1.model_args.y
+    
+    # 选择目标值最小的3个点作为先验
+    sorted_indices = sortperm(all_y)
+    best_indices = sorted_indices[1:min(3, length(sorted_indices))]
+    
+    prior_X = [all_X[i] for i in best_indices]
+    prior_y = [all_y[i] for i in best_indices]
+    
+    println("使用的先验数据:")
+    for (i, (x, y)) in enumerate(zip(prior_X, prior_y))
+        println("  先验点 $i: [$(join(round.(x, digits=3), ", "))] → $(round(y, digits=2))")
+    end
+    
+    # 用先验数据再次优化
+    result2 = bayesian_optimize_pnjl_simple(
+        kappa_pairs, μ_B_values, T_min, T_max, bounds;
+        prior_X=prior_X, prior_y=prior_y,
+        max_iterations=5, T_step=8.0/hc, verbosity=1
+    )
+    
+    # 4. 比较结果
+    println("\n结果比较:")
+    println("  第一次优化最优值: $(round(minimum(result1.model_args.y), digits=3))")
+    println("  第二次优化最优值: $(round(minimum(result2.model_args.y), digits=3))")
+    
+    improvement = minimum(result1.model_args.y) - minimum(result2.model_args.y)
+    if improvement > 0
+        println("  改进: $(round(improvement, digits=3)) ($(round(improvement/minimum(result1.model_args.y)*100, digits=1))%)")
+    else
+        println("  第二次优化未发现更好的解")
+    end
+    
+    println("\n✅ 完整使用示例完成!")
+    println("\n总结:")
+    println("  - 简化版本大大减少了代码复杂性")
+    println("  - 支持先验数据可以加速收敛")
+    println("  - API设计更加直观易用")
+    println("  - 适合快速原型开发和测试")
+    
+    return result1, result2
+end
+
+# =============================================================================
+# 快速测试函数
+# =============================================================================
+
+function quick_test_simplified_api()
+    """
+    快速测试简化版API是否工作正常
+    """
+    
+    println("="^60)
+    println("快速测试简化版贝叶斯优化API")
+    println("="^60)
+    
+    # 使用最小配置进行测试
+    kappa_pairs = [(1.09, -0.29)]
+    μ_B_values = [632.0/hc]
+    T_min, T_max = 80.0/hc, 120.0/hc
+    
+    bounds = [
+        (0.150, 0.160),   # ρ₀
+        (-16.5, -16.0),   # B_A  
+        (240.0, 260.0),   # K
+        (0.65, 0.70),     # m_ratio
+        (31.0, 33.0)      # E_sym
+    ]
+    
+    println("测试配置:")
+    println("  数据点: 1 组")
+    println("  温度范围: $(T_min*hc)-$(T_max*hc) MeV")
+    println("  迭代次数: 3")
+    
+    try
+        result = bayesian_optimize_pnjl_simple(
+            kappa_pairs, μ_B_values, T_min, T_max, bounds;
+            max_iterations=3, T_step=10.0/hc, verbosity=0
+        )
+        
+        println("✅ 简化版API测试成功!")
+        println("   总评估: $(length(result.model_args.y))")
+        println("   最优值: $(round(minimum(result.model_args.y), digits=2))")
+        
+        return true
+        
+    catch e
+        println("❌ 简化版API测试失败: $e")
+        return false
+    end
 end
