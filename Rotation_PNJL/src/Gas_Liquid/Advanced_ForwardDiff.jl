@@ -458,3 +458,148 @@ function save_forwarddiff_results(results, μ_B, T_min, T_max, T_step, output_fi
         println("✗ 保存CSV文件失败: $e")
     end
 end
+
+function forwarddiff_temperature_scan_with_optimization_params(
+    μ_B, T_min, T_max, T_step, optimization_params, output_file; 
+    gsigma=1.25, gdelta=0.01, n_nodes=256)
+    """
+    使用优化参数计算耦合常数，然后进行ForwardDiff温度扫描
+    
+    参数:
+    - μ_B: 固定重子化学势
+    - T_min: 最小温度
+    - T_max: 最大温度
+    - T_step: 温度步长
+    - optimization_params: 优化参数元组 (ρ₀, B_A, K, m_ratio, E_sym)
+        * ρ₀: 核饱和密度 (fm⁻³)
+        * B_A: 结合能 (MeV)
+        * K: 不可压缩模量 (MeV)
+        * m_ratio: 有效质量比
+        * E_sym: 对称能 (MeV)
+    - output_file: 输出文件路径
+    - gsigma, gdelta: 场初值 (可选)
+    - n_nodes: 积分节点数 (可选)
+    
+    返回:
+    - DataFrame: 包含所有计算结果的数据框
+    """
+    
+    # 解包优化参数
+    ρ₀, B_A, K, m_ratio, E_sym = optimization_params
+    
+    println("="^80)
+    println("基于优化参数的ForwardDiff温度扫描")
+    println("="^80)
+    println("优化参数:")
+    println("  ρ₀ = $ρ₀ fm⁻³")
+    println("  B_A = $B_A MeV")
+    println("  K = $K MeV") 
+    println("  m_ratio = $m_ratio")
+    println("  E_sym = $E_sym MeV")
+    println("扫描参数:")
+    println("  μ_B = $(μ_B*hc) MeV")
+    println("  温度范围: $(T_min*hc) - $(T_max*hc) MeV")
+    println("  温度步长: $(T_step*hc) MeV")
+    println("  场初值: gsigma=$gsigma, gdelta=$gdelta")
+    
+    # 将优化参数转换为无量纲单位（除以hc）
+    ρ₀_dimensionless = ρ₀
+    B_A_dimensionless = B_A / hc
+    K_dimensionless = K / hc  
+    E_sym_dimensionless = E_sym / hc
+    
+    # 计算耦合常数
+    println("\n计算耦合常数...")
+    try
+        fσ, fω, fρ, fδ, b, c = calculate_couplings(
+            ρ₀_dimensionless, B_A_dimensionless, K_dimensionless, m_ratio, E_sym_dimensionless)
+        
+        println("  耦合常数计算结果:")
+        println("    fσ = $(round(fσ, digits=6))")
+        println("    fω = $(round(fω, digits=6))")
+        println("    fρ = $(round(fρ, digits=6))")
+        println("    fδ = $(round(fδ, digits=6))")
+        println("    b = $(round(b, digits=6))")
+        println("    c = $(round(c, digits=6))")
+        
+        # 调用原始的温度扫描函数
+        println("\n开始ForwardDiff温度扫描...")
+        results_df = forwarddiff_temperature_scan(
+            μ_B, T_min, T_max, T_step, output_file;
+            gsigma=gsigma, gdelta=gdelta, 
+            fs=fσ, fo=fω, fr=fρ, fd=fδ,
+            b=b, c=c, n_nodes=n_nodes)
+        
+        println("\n✓ 基于优化参数的ForwardDiff温度扫描完成")
+        return results_df
+        
+    catch e
+        println("✗ 耦合常数计算失败: $e")
+        
+        # 返回空的DataFrame
+        empty_results = [(
+            T_MeV = NaN,
+            P_T4 = NaN,
+            kappa1 = NaN,
+            kappa2 = NaN,
+            kappa3 = NaN,
+            kappa4 = NaN,
+            kappa3_over_kappa1 = NaN,
+            kappa4_over_kappa2 = NaN,
+            mu_over_T = NaN
+        )]
+        
+        return DataFrame(empty_results)
+    end
+end
+
+function demo_forwarddiff_with_optimization_params()
+    """
+    演示函数：展示如何使用基于优化参数的ForwardDiff温度扫描
+    """
+    
+    println("="^80)
+    println("演示：基于优化参数的ForwardDiff温度扫描")
+    println("="^80)
+    
+    # 定义测试参数
+    μ_B = 300.0 / hc  # 300 MeV，转换为无量纲单位
+    T_min = 100.0 / hc   # 100 MeV
+    T_max = 200.0 / hc   # 200 MeV
+    T_step = 10.0 / hc   # 10 MeV 步长
+    optimization_params = (0.15, 16.0, 240.0, 0.7, 32.0)  # (ρ₀, B_A, K, m_ratio, E_sym)
+    output_file = "output/Gas_Liquid/demo_forwarddiff_optimization.csv"
+    
+    println("演示参数:")
+    println("  μ_B = $(μ_B*hc) MeV")
+    println("  温度范围: $(T_min*hc) - $(T_max*hc) MeV，步长: $(T_step*hc) MeV")
+    println("  优化参数: $optimization_params")
+    println("  输出文件: $output_file")
+    
+    # 调用基于优化参数的温度扫描
+    results_df = forwarddiff_temperature_scan_with_optimization_params(
+        μ_B, T_min, T_max, T_step, optimization_params, output_file;
+        gsigma=1.25, gdelta=0.01, n_nodes=256)
+    
+    if nrow(results_df) > 1
+        println("\n演示结果摘要:")
+        println("  计算的温度点数: $(nrow(results_df))")
+        
+        valid_κ3κ1 = filter(isfinite, results_df.kappa3_over_kappa1)
+        valid_κ4κ2 = filter(isfinite, results_df.kappa4_over_kappa2)
+        
+        if !isempty(valid_κ3κ1)
+            println("  κ₃/κ₁ 范围: $(round(minimum(valid_κ3κ1), digits=3)) - $(round(maximum(valid_κ3κ1), digits=3))")
+        end
+        
+        if !isempty(valid_κ4κ2)
+            println("  κ₄/κ₂ 范围: $(round(minimum(valid_κ4κ2), digits=3)) - $(round(maximum(valid_κ4κ2), digits=3))")
+        end
+        
+        println("\n✅ 演示成功完成！")
+    else
+        println("\n❌ 演示失败：计算结果为空")
+    end
+    
+    return results_df
+end

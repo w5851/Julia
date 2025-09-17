@@ -229,20 +229,45 @@ function plot_individual_kappas(csv_file::String, save_path::String="")
 end
 
 # 主执行部分
-function main()
+function main(csv_file::String="")
+    """
+    主函数：绘制温度扫描结果图
+    
+    参数:
+    - csv_file: CSV文件路径（可选）
+        - 如果提供，使用指定的文件路径
+        - 如果未提供或为空字符串，则：
+          1. 优先使用命令行参数 ARGS[1]
+          2. 其次使用默认路径 "../../output/Gas_Liquid/forwarddiff_temperature_scan.csv"
+    """
+    
     # 获取脚本所在目录
     script_dir = dirname(@__FILE__)
     
-    # 检查命令行参数
-    if length(ARGS) > 0
-        csv_file = ARGS[1]
-        # 如果提供的是相对路径，则相对于脚本目录
-        if !isabspath(csv_file)
-            csv_file = joinpath(script_dir, csv_file)
-        end
+    # 确定CSV文件路径的优先级：
+    # 1. 函数参数 csv_file（如果非空）
+    # 2. 命令行参数 ARGS[1]（如果存在）
+    # 3. 默认路径
+    if !isempty(csv_file)
+        # 使用函数参数
+        target_csv = csv_file
+        println("使用函数参数指定的CSV文件: $target_csv")
+    elseif length(ARGS) > 0
+        # 使用命令行参数
+        target_csv = ARGS[1]
+        println("使用命令行参数指定的CSV文件: $target_csv")
     else
-        csv_file = joinpath(script_dir, "../../output/Gas_Liquid/forwarddiff_temperature_scan.csv")
+        # 使用默认路径
+        target_csv = joinpath(script_dir, "../../output/Gas_Liquid/forwarddiff_temperature_scan.csv")
+        println("使用默认CSV文件路径: $target_csv")
     end
+    
+    # 如果提供的是相对路径，则相对于脚本目录
+    if !isabspath(target_csv)
+        target_csv = joinpath(script_dir, target_csv)
+    end
+    
+    csv_file = target_csv
     
     # 输出图像路径
     output_dir = joinpath(script_dir, "../../output/Gas_Liquid")
@@ -291,8 +316,19 @@ function main()
     end
 end
 
-main()
-# 如果直接运行此脚本，执行main函数
-#if abspath(PROGRAM_FILE) == @__FILE__
-#    main()
-#end
+# 自动执行main函数的逻辑
+# 方法1：检查是否是直接运行脚本（命令行方式）
+if abspath(PROGRAM_FILE) == @__FILE__
+    println("检测到命令行运行，自动执行main()...")
+    main()
+# 方法2：检查是否在REPL中include此文件且没有命令行参数
+elseif isinteractive() && length(ARGS) == 0
+    println("检测到REPL环境，自动执行main()...")
+    println("如果不希望自动执行，请使用: include(\"plot_temperature_scan.jl\"); # 然后手动调用main()")
+    main("../../output/Gas_Liquid/forwarddiff_optimization_params_scan.csv")
+else
+    println("脚本已加载。请手动调用 main() 或 main(\"csv文件路径\") 来绘制图形。")
+    println("示例:")
+    println("  main()  # 使用默认路径")
+    println("  main(\"../../output/Gas_Liquid/your_file.csv\")  # 使用指定路径")
+end
