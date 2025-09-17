@@ -5,7 +5,7 @@
 # 使用简单的滑动数组检测和线性插值，无需外部依赖
 
 include("Advanced_ForwardDiff.jl")
-include("Constants_Gas_Liquid.jl")
+#include("Constants_Gas_Liquid.jl")
 using .Constants_Gas_Liquid
 using DataFrames, Statistics, Dates
 
@@ -664,7 +664,7 @@ function save_temperature_finder_results(results, μ_B, T_min, T_max, T_step_sca
 end
 
 function calculate_temperature_difference_sum_of_squares(
-    kappa_pairs, μ_B, optimization_params, T_min, T_max;
+    kappa_pairs, μ_B_values, optimization_params, T_min, T_max;
     T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
     penalty_for_missing=1e6, verbose=false)
     """
@@ -676,7 +676,7 @@ function calculate_temperature_difference_sum_of_squares(
     
     参数:
     - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...]
-    - μ_B: 重子化学势
+    - μ_B_values: 重子化学势数组，与 kappa_pairs 一一对应，格式 [μ_B1, μ_B2, ...]
     - optimization_params: 优化参数元组 (ρ₀, B_A, K, m_ratio, E_sym)
         * ρ₀: 核饱和密度 (fm⁻³)
         * B_A: 结合能 (MeV)
@@ -697,6 +697,11 @@ function calculate_temperature_difference_sum_of_squares(
       如果某组计算失败或找不到温度，则贡献 penalty_for_missing。
     """
     
+    # 验证输入参数
+    if length(μ_B_values) != length(kappa_pairs)
+        error("μ_B值数组长度 ($(length(μ_B_values))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
+    end
+    
     # 解包优化参数
     ρ₀, B_A, K, m_ratio, E_sym = optimization_params
     
@@ -705,7 +710,8 @@ function calculate_temperature_difference_sum_of_squares(
         println("基于优化参数的温度差平方和计算")
         println("="^80)
         println("优化参数: ρ₀=$ρ₀, B_A=$B_A MeV, K=$K MeV, m_ratio=$m_ratio, E_sym=$E_sym MeV")
-        println("μ_B = $(μ_B*hc) MeV，共 $(length(kappa_pairs)) 组κ比值")
+        println("共 $(length(kappa_pairs)) 组κ比值，每组对应不同的μ_B值")
+        println("μ_B范围: $(round(minimum(μ_B_values)*hc, digits=1)) - $(round(maximum(μ_B_values)*hc, digits=1)) MeV")
         println("温度搜索范围: $(T_min*hc) - $(T_max*hc) MeV")
         println("无效值惩罚: $penalty_for_missing")
     end
@@ -714,9 +720,9 @@ function calculate_temperature_difference_sum_of_squares(
     valid_pairs = 0
     failed_pairs = 0
     
-    for (i, (kappa3_kappa1, kappa4_kappa2)) in enumerate(kappa_pairs)
+    for (i, ((kappa3_kappa1, kappa4_kappa2), μ_B)) in enumerate(zip(kappa_pairs, μ_B_values))
         if verbose
-            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2")
+            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2, μ_B = $(round(μ_B*hc, digits=1)) MeV")
         end
         
         try
@@ -782,7 +788,7 @@ function calculate_temperature_difference_sum_of_squares(
 end
 
 function calculate_temperature_difference_sum_of_squares_with_weights(
-    kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+    kappa_pairs, weights, μ_B_values, optimization_params, T_min, T_max;
     T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
     penalty_for_missing=1e6, verbose=false)
     """
@@ -791,6 +797,7 @@ function calculate_temperature_difference_sum_of_squares_with_weights(
     参数:
     - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...]
     - weights: 权重数组，与 kappa_pairs 长度相同
+    - μ_B_values: 重子化学势数组，与 kappa_pairs 一一对应
     - 其他参数: 与 calculate_temperature_difference_sum_of_squares 相同
     
     返回:
@@ -801,6 +808,10 @@ function calculate_temperature_difference_sum_of_squares_with_weights(
         error("权重数组长度 ($(length(weights))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
     end
     
+    if length(μ_B_values) != length(kappa_pairs)
+        error("μ_B值数组长度 ($(length(μ_B_values))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
+    end
+    
     # 解包优化参数
     ρ₀, B_A, K, m_ratio, E_sym = optimization_params
     
@@ -809,7 +820,8 @@ function calculate_temperature_difference_sum_of_squares_with_weights(
         println("基于优化参数的加权温度差平方和计算")
         println("="^80)
         println("优化参数: ρ₀=$ρ₀, B_A=$B_A MeV, K=$K MeV, m_ratio=$m_ratio, E_sym=$E_sym MeV")
-        println("μ_B = $(μ_B*hc) MeV，共 $(length(kappa_pairs)) 组κ比值")
+        println("共 $(length(kappa_pairs)) 组κ比值，每组对应不同的μ_B值")
+        println("μ_B范围: $(round(minimum(μ_B_values)*hc, digits=1)) - $(round(maximum(μ_B_values)*hc, digits=1)) MeV")
         println("权重范围: $(round(minimum(weights), digits=3)) - $(round(maximum(weights), digits=3))")
     end
     
@@ -817,9 +829,9 @@ function calculate_temperature_difference_sum_of_squares_with_weights(
     valid_pairs = 0
     failed_pairs = 0
     
-    for (i, ((kappa3_kappa1, kappa4_kappa2), weight)) in enumerate(zip(kappa_pairs, weights))
+    for (i, ((kappa3_kappa1, kappa4_kappa2), weight, μ_B)) in enumerate(zip(kappa_pairs, weights, μ_B_values))
         if verbose
-            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2, 权重 = $weight")
+            println("\n处理第 $i/$(length(kappa_pairs)) 组: κ₃/κ₁ = $kappa3_kappa1, κ₄/κ₂ = $kappa4_kappa2, 权重 = $weight, μ_B = $(round(μ_B*hc, digits=1)) MeV")
         end
         
         try
@@ -887,21 +899,21 @@ function demo_temperature_difference_sum_of_squares()
     
     # 定义测试参数
     kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]  # 示例κ比值对
-    μ_B = 300.0 / hc  # 300 MeV，转换为无量纲单位
+    μ_B_values = [300.0/hc, 320.0/hc, 340.0/hc]  # 每组对应不同的μ_B值
     optimization_params = (0.15, 16.0, 240.0, 0.7, 32.0)  # (ρ₀, B_A, K, m_ratio, E_sym)
     T_min = 80.0 / hc   # 80 MeV
     T_max = 200.0 / hc  # 200 MeV
     
     println("测试参数:")
     println("  κ比值对: $kappa_pairs")
-    println("  μ_B = $(μ_B*hc) MeV")
+    println("  μ_B值: $([round(μ*hc, digits=1) for μ in μ_B_values]) MeV")
     println("  优化参数: $optimization_params")
     println("  温度范围: $(T_min*hc) - $(T_max*hc) MeV")
     
     # 计算温度差平方和
     println("\n计算温度差平方和...")
     sum_of_squares = calculate_temperature_difference_sum_of_squares(
-        kappa_pairs, μ_B, optimization_params, T_min, T_max;
+        kappa_pairs, μ_B_values, optimization_params, T_min, T_max;
         T_step_scan=2.0/hc, verbose=true, penalty_for_missing=1e4)
     
     println("\n最终结果:")
@@ -916,7 +928,7 @@ function demo_temperature_difference_sum_of_squares()
     println("权重: $weights")
     
     weighted_sum = calculate_temperature_difference_sum_of_squares_with_weights(
-        kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+        kappa_pairs, weights, μ_B_values, optimization_params, T_min, T_max;
         T_step_scan=2.0/hc, verbose=true, penalty_for_missing=1e4)
     
     println("\n最终结果:")
@@ -926,18 +938,18 @@ function demo_temperature_difference_sum_of_squares()
 end
 
 function create_temperature_difference_objective(
-    kappa_pairs, μ_B, T_min, T_max;
+    kappa_pairs, μ_B_values, T_min, T_max;
     T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
     penalty_for_missing=1e6, verbose=false)
     """
     创建温度差平方和目标函数的闭包
     
-    此函数将实验确定的参数（kappa_pairs, μ_B, T_min, T_max）封装在闭包中，
+    此函数将实验确定的参数（kappa_pairs, μ_B_values, T_min, T_max）封装在闭包中，
     返回一个只需要优化参数作为输入的目标函数，适用于参数优化算法。
     
     参数:
     - kappa_pairs: κ比值对数组，格式 [(κ₃/κ₁, κ₄/κ₂), ...] (实验确定)
-    - μ_B: 重子化学势 (实验确定)
+    - μ_B_values: 重子化学势数组，与 kappa_pairs 一一对应 (实验确定)
     - T_min, T_max: 温度搜索范围 (实验确定)
     - T_step_scan: 扫描步长
     - gsigma, gdelta: 强子-夸克耦合参数
@@ -953,7 +965,7 @@ function create_temperature_difference_objective(
     ```julia
     # 创建目标函数
     kappa_pairs = [(1.2, 2.5), (1.5, 3.0)]
-    μ_B = 300.0 / hc
+    μ_B_values = [300.0/hc, 320.0/hc]  # 每组对应不同的μ_B
     T_min, T_max = 80.0/hc, 200.0/hc
     
     objective_func = create_temperature_difference_objective(
@@ -976,7 +988,7 @@ function create_temperature_difference_objective(
         - sum_of_squares: 温度差平方和 (MeV²)
         """
         return calculate_temperature_difference_sum_of_squares(
-            kappa_pairs, μ_B, optimization_params, T_min, T_max;
+            kappa_pairs, μ_B_values, optimization_params, T_min, T_max;
             T_step_scan=T_step_scan, gsigma=gsigma, gdelta=gdelta, 
             n_nodes=n_nodes, penalty_for_missing=penalty_for_missing, verbose=verbose)
     end
@@ -985,7 +997,7 @@ function create_temperature_difference_objective(
 end
 
 function create_weighted_temperature_difference_objective(
-    kappa_pairs, weights, μ_B, T_min, T_max;
+    kappa_pairs, weights, μ_B_values, T_min, T_max;
     T_step_scan=1.0/hc, gsigma=1.25, gdelta=0.01, n_nodes=256,
     penalty_for_missing=1e6, verbose=false)
     """
@@ -994,6 +1006,7 @@ function create_weighted_temperature_difference_objective(
     参数:
     - kappa_pairs: κ比值对数组
     - weights: 权重数组，与 kappa_pairs 长度相同
+    - μ_B_values: 重子化学势数组，与 kappa_pairs 一一对应
     - 其他参数: 与 create_temperature_difference_objective 相同
     
     返回:
@@ -1002,6 +1015,10 @@ function create_weighted_temperature_difference_objective(
     
     if length(weights) != length(kappa_pairs)
         error("权重数组长度 ($(length(weights))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
+    end
+    
+    if length(μ_B_values) != length(kappa_pairs)
+        error("μ_B值数组长度 ($(length(μ_B_values))) 与κ比值对数组长度 ($(length(kappa_pairs))) 不匹配")
     end
     
     function weighted_objective_function(optimization_params)
@@ -1015,7 +1032,7 @@ function create_weighted_temperature_difference_objective(
         - weighted_sum_of_squares: 加权温度差平方和 (MeV²)
         """
         return calculate_temperature_difference_sum_of_squares_with_weights(
-            kappa_pairs, weights, μ_B, optimization_params, T_min, T_max;
+            kappa_pairs, weights, μ_B_values, optimization_params, T_min, T_max;
             T_step_scan=T_step_scan, gsigma=gsigma, gdelta=gdelta, 
             n_nodes=n_nodes, penalty_for_missing=penalty_for_missing, verbose=verbose)
     end
@@ -1034,18 +1051,18 @@ function demo_objective_function_closure()
     
     # 实验确定的参数
     kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
-    μ_B = 300.0 / hc  # 300 MeV
+    μ_B_values = [300.0/hc, 320.0/hc, 340.0/hc]  # 每组对应不同的μ_B值
     T_min, T_max = 80.0/hc, 200.0/hc  # 80-200 MeV
     
     println("实验确定的参数:")
     println("  κ比值对: $kappa_pairs")
-    println("  μ_B = $(μ_B*hc) MeV")
+    println("  μ_B值: $([round(μ*hc, digits=1) for μ in μ_B_values]) MeV")
     println("  温度范围: $(T_min*hc) - $(T_max*hc) MeV")
     
     # 创建目标函数
     println("\n创建目标函数闭包...")
     objective_func = create_temperature_difference_objective(
-        kappa_pairs, μ_B, T_min, T_max; 
+        kappa_pairs, μ_B_values, T_min, T_max; 
         T_step_scan=2.0/hc, verbose=false, penalty_for_missing=1e4)
     
     # 测试不同的优化参数
@@ -1074,7 +1091,7 @@ function demo_objective_function_closure()
     println("权重: $weights")
     
     weighted_objective_func = create_weighted_temperature_difference_objective(
-        kappa_pairs, weights, μ_B, T_min, T_max; 
+        kappa_pairs, weights, μ_B_values, T_min, T_max; 
         T_step_scan=2.0/hc, verbose=false, penalty_for_missing=1e4)
     
     println("\n测试加权目标函数:")

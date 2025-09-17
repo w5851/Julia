@@ -82,5 +82,111 @@ catch e
     println("错误位置: $(stacktrace()[1])")
 end
 
+println("\n" * "="^80)
+println("测试目标函数闭包")
+println("="^80)
+
+# 测试闭包函数
+println("\n开始测试目标函数闭包...")
+try
+    # 实验确定的参数（这些参数将在实际使用时由用户填入）
+    experimental_kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]  # 实验κ比值对
+    experimental_μ_B = 300.0 / hc  # 300 MeV，实验确定的重子化学势
+    experimental_T_min = 80.0 / hc   # 80 MeV，实验温度下限
+    experimental_T_max = 200.0 / hc  # 200 MeV，实验温度上限
+    
+    println("\n实验确定的参数:")
+    println("  κ比值对: $experimental_kappa_pairs")
+    println("  μ_B = $(experimental_μ_B*hc) MeV")
+    println("  温度搜索范围: $(experimental_T_min*hc) - $(experimental_T_max*hc) MeV")
+    
+    # 创建目标函数闭包
+    println("\n创建目标函数闭包...")
+    objective_func = create_temperature_difference_objective(
+        experimental_kappa_pairs, experimental_μ_B, experimental_T_min, experimental_T_max;
+        T_step_scan=3.0/hc,  # 加快测试速度
+        verbose=false,       # 减少输出
+        penalty_for_missing=1e4,
+        n_nodes=128         # 减少积分点以加快测试
+    )
+    
+    println("✓ 目标函数闭包创建成功")
+    
+    # 测试不同的优化参数组合
+    test_optimization_params = [
+        (0.15, 16.0, 240.0, 0.7, 32.0),   # 标准参数组
+        (0.16, 15.5, 250.0, 0.75, 30.0),  # 变化参数组1
+        (0.14, 16.5, 230.0, 0.65, 34.0)   # 变化参数组2
+    ]
+    
+    println("\n测试不同优化参数:")
+    for (i, params) in enumerate(test_optimization_params)
+        ρ₀, B_A, K, m_ratio, E_sym = params
+        println("\n参数组 $i:")
+        println("  ρ₀ = $ρ₀ fm⁻³")
+        println("  B_A = $B_A MeV") 
+        println("  K = $K MeV")
+        println("  m_ratio = $m_ratio")
+        println("  E_sym = $E_sym MeV")
+        
+        # 使用闭包计算目标函数值
+        println("  计算目标函数值...")
+        result = objective_func(params)
+        
+        if isfinite(result)
+            @printf("  ✓ 目标函数值: %.2f MeV²\n", result)
+        else
+            println("  ✗ 目标函数值: $result (无效)")
+        end
+    end
+    
+    # 测试加权版本
+    println("\n" * "-"^60)
+    println("测试加权目标函数闭包")
+    println("-"^60)
+    
+    weights = [1.0, 2.0, 0.5]  # 示例权重
+    println("权重设置: $weights")
+    
+    weighted_objective_func = create_weighted_temperature_difference_objective(
+        experimental_kappa_pairs, weights, experimental_μ_B, experimental_T_min, experimental_T_max;
+        T_step_scan=3.0/hc,
+        verbose=false,
+        penalty_for_missing=1e4,
+        n_nodes=128
+    )
+    
+    println("✓ 加权目标函数闭包创建成功")
+    
+    # 测试加权版本（只测试前两个参数组以节省时间）
+    println("\n测试加权目标函数:")
+    for (i, params) in enumerate(test_optimization_params[1:2])
+        ρ₀, B_A, K, m_ratio, E_sym = params
+        println("\n参数组 $i:")
+        @printf("  ρ₀=%.2f, B_A=%.1f MeV, K=%.1f MeV, m_ratio=%.2f, E_sym=%.1f MeV\n", 
+                ρ₀, B_A, K, m_ratio, E_sym)
+        
+        weighted_result = weighted_objective_func(params)
+        
+        if isfinite(weighted_result)
+            @printf("  ✓ 加权目标函数值: %.2f MeV²\n", weighted_result)
+        else
+            println("  ✗ 加权目标函数值: $weighted_result (无效)")
+        end
+    end
+    
+    println("\n✅ 目标函数闭包测试完成!")
+    println("📝 注意: 请根据实际实验数据替换以下参数:")
+    println("   - experimental_kappa_pairs: 实验观测的κ比值对")
+    println("   - experimental_μ_B: 实验条件下的重子化学势")
+    println("   - experimental_T_min, experimental_T_max: 实验温度范围")
+    println("   - weights: 各组κ比值的实验权重")
+    
+catch e
+    println("\n✗ 目标函数闭包测试失败:")
+    println("错误信息: $e")
+    println("错误位置: $(stacktrace()[1])")
+end
+
 println("\n测试结束时间: $(Dates.now())")
 println("="^80)

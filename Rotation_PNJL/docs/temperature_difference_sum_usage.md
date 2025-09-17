@@ -45,7 +45,7 @@ create_temperature_difference_objective(
 ### 基本使用
 ```julia
 # 包含模块
-include("src/Gas_Liquid/Advanced_FindTforDiff.jl")
+# include("src/Gas_Liquid/Advanced_FindTforDiff.jl")
 
 # 定义输入参数
 kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
@@ -66,12 +66,12 @@ println("温度差平方和: $sum_sq MeV²")
 ```julia
 # 实验确定的参数（固定）
 kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
-μ_B = 300.0 / hc  # 300 MeV
+μ_B_values = [300.0/hc, 320.0/hc, 340.0/hc]  # 每组对应不同的μ_B值 ⚠️ 重要变更
 T_min, T_max = 80.0/hc, 200.0/hc  # 80-200 MeV
 
 # 创建目标函数闭包
 objective_func = create_temperature_difference_objective(
-    kappa_pairs, μ_B, T_min, T_max; 
+    kappa_pairs, μ_B_values, T_min, T_max; 
     verbose=false, penalty_for_missing=1e6)
 
 # 现在目标函数只需要优化参数输入
@@ -91,10 +91,35 @@ result = optimize(params -> objective_func(tuple(params...)), initial_params)
 # 使用权重版本
 weights = [1.0, 2.0, 0.5]
 weighted_objective_func = create_weighted_temperature_difference_objective(
-    kappa_pairs, weights, μ_B, T_min, T_max; verbose=false)
+    kappa_pairs, weights, μ_B_values, T_min, T_max; verbose=false)
 
 weighted_result = weighted_objective_func(optimization_params)
 println("加权目标函数值: $weighted_result MeV²")
+```
+
+### ⚠️ 重要变更说明
+
+**从单一μ_B到μ_B数组**：
+- **旧版本**: 所有κ比值对使用相同的μ_B值
+- **新版本**: 每组κ比值对对应独立的μ_B值，更符合实验实际
+
+**函数签名变更**：
+```julia
+# 旧版本
+calculate_temperature_difference_sum_of_squares(kappa_pairs, μ_B, ...)
+
+# 新版本  
+calculate_temperature_difference_sum_of_squares(kappa_pairs, μ_B_values, ...)
+```
+
+**输入数据格式**：
+```julia
+# 示例：3组实验数据
+kappa_pairs = [(1.2, 2.5), (1.5, 3.0), (1.8, 3.5)]
+μ_B_values = [300.0/hc, 320.0/hc, 340.0/hc]  # 一一对应
+
+# 数组长度必须相等
+assert(length(kappa_pairs) == length(μ_B_values))
 ```
 
 ## 运行演示

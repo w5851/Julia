@@ -3,7 +3,7 @@
 # 依赖于 Function_Gas_Liquid.jl 中的基础函数
 
 include("Function_Gas_Liquid.jl")
-include("Constants_Gas_Liquid.jl")
+#include("Constants_Gas_Liquid.jl")
 using .Constants_Gas_Liquid: hc
 using NLsolve
 using ForwardDiff
